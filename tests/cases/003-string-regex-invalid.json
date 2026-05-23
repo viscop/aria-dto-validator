@@ -1,0 +1,19 @@
+{
+  "name": "invalid hostname regex",
+  "userDTO": {
+    "hostname": "APP 01"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "hostname",
+      "type": "string",
+      "regex": "^[a-z0-9-]+$",
+      "errorMessage": "Hostname is invalid."
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorIncludes": ["Hostname is invalid."]
+  }
+}

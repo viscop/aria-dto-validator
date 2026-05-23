@@ -1,0 +1,32 @@
+{
+  "name": "object subset allows extra backend keys",
+  "userDTO": {
+    "networks": [
+      {
+        "name": "prod-net",
+        "zone": "eu"
+      }
+    ]
+  },
+  "backendDTO": {
+    "allowedNetworks": [
+      {
+        "name": "prod-net",
+        "zone": "eu",
+        "id": "net-123"
+      }
+    ]
+  },
+  "policy": [
+    {
+      "type": "object",
+      "leftPath": "networks",
+      "rightPath": "allowedNetworks",
+      "objectMode": "subset",
+      "errorMessage": "Selected network is not allowed."
+    }
+  ],
+  "expected": {
+    "valid": true
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "number notAllowedValues rejects reserved port range",
+  "userDTO": {
+    "port": "25"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "port",
+      "type": "number",
+      "integerOnly": true,
+      "notAllowedValues": ["20-30", 3389],
+      "errorMessage": "Port is reserved."
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorIncludes": ["Port is reserved."]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "strictPath rejects implicit array traversal",
+  "userDTO": {
+    "nics": [
+      {
+        "network": "prod-net"
+      }
+    ]
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "nics.network",
+      "type": "string",
+      "strictPath": true
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorIncludes": ["Invalid path 'nics.network'"]
+  }
+}

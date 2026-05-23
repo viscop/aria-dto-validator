@@ -1,0 +1,20 @@
+{
+  "name": "forbidden tag detected",
+  "userDTO": {
+    "tags": ["customer-facing", "forbidden"]
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "tags[*]",
+      "type": "string",
+      "noneMatch": true,
+      "allowedValues": ["forbidden", "internal-only"],
+      "errorMessage": "At least one tag is not allowed."
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorIncludes": ["At least one tag is not allowed."]
+  }
+}

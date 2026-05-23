@@ -1,0 +1,11 @@
+{
+  "name": "policy stored as JSON string and parsed before validation",
+  "userDTO": {
+    "environment": "prod"
+  },
+  "backendDTO": {},
+  "policyJson": "[{\"path\":\"environment\",\"type\":\"string\",\"allowedValues\":[\"dev\",\"test\",\"prod\"],\"onMissing\":\"fail\"}]",
+  "expected": {
+    "valid": true
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "name": "nested object array quantifier all requires every element",
+  "userDTO": {
+    "requestedRules": [
+      {
+        "protocol": "tcp",
+        "port": 443,
+        "source": {
+          "type": "cidr",
+          "value": "10.0.0.0/24"
+        }
+      },
+      {
+        "protocol": "tcp",
+        "port": 8443,
+        "source": {
+          "type": "cidr",
+          "value": "10.0.1.0/24"
+        }
+      }
+    ]
+  },
+  "backendDTO": {
+    "approvedRules": [
+      {
+        "protocol": "tcp",
+        "port": 80,
+        "source": {
+          "type": "cidr",
+          "value": "10.0.0.0/24"
+        }
+      },
+      {
+        "protocol": "tcp",
+        "port": 443,
+        "source": {
+          "type": "cidr",
+          "value": "10.0.0.0/24"
+        }
+      }
+    ]
+  },
+  "policy": [
+    {
+      "type": "object",
+      "leftPath": "requestedRules",
+      "rightPath": "approvedRules",
+      "arrayDefault": {
+        "quantifier": "all",
+        "distinct": true
+      },
+      "errorMessage": "At least one requested security rule is not approved."
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorIncludes": ["At least one requested security rule is not approved."]
+  }
+}

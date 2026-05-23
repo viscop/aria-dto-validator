@@ -1,0 +1,30 @@
+{
+  "name": "object deepEqual valid by default",
+  "userDTO": {
+    "networks": [
+      {
+        "name": "prod-net",
+        "zone": "eu"
+      }
+    ]
+  },
+  "backendDTO": {
+    "allowedNetworks": [
+      {
+        "name": "prod-net",
+        "zone": "eu"
+      }
+    ]
+  },
+  "policy": [
+    {
+      "type": "object",
+      "leftPath": "networks",
+      "rightPath": "allowedNetworks",
+      "errorMessage": "Selected network must exactly match backend reference."
+    }
+  ],
+  "expected": {
+    "valid": true
+  }
+}

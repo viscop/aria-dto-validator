@@ -1,0 +1,50 @@
+{
+  "name": "nested object deepEqual valid",
+  "userDTO": {
+    "securityProfile": {
+      "name": "web-prod",
+      "rules": [
+        {
+          "protocol": "tcp",
+          "ports": [443],
+          "source": {
+            "type": "cidr",
+            "value": "10.0.0.0/24"
+          }
+        }
+      ]
+    }
+  },
+  "backendDTO": {
+    "approvedSecurityProfiles": [
+      {
+        "name": "web-prod",
+        "rules": [
+          {
+            "protocol": "tcp",
+            "ports": [443],
+            "source": {
+              "type": "cidr",
+              "value": "10.0.0.0/24"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "policy": [
+    {
+      "type": "object",
+      "leftPath": "securityProfile",
+      "rightPath": "approvedSecurityProfiles[*]",
+      "arrayDefault": {
+        "quantifier": "all",
+        "distinct": true
+      },
+      "errorMessage": "Security profile is not approved."
+    }
+  ],
+  "expected": {
+    "valid": true
+  }
+}

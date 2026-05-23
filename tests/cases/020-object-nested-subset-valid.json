@@ -1,0 +1,38 @@
+{
+  "name": "nested object subset allows backend metadata",
+  "userDTO": {
+    "selectedStoragePolicy": {
+      "name": "gold",
+      "capabilities": {
+        "tier": "ssd",
+        "replication": "sync"
+      }
+    }
+  },
+  "backendDTO": {
+    "storagePolicies": [
+      {
+        "id": "sp-001",
+        "name": "gold",
+        "description": "Gold storage policy",
+        "capabilities": {
+          "tier": "ssd",
+          "replication": "sync",
+          "iopsLimit": 10000
+        }
+      }
+    ]
+  },
+  "policy": [
+    {
+      "type": "object",
+      "leftPath": "selectedStoragePolicy",
+      "rightPath": "storagePolicies[*]",
+      "objectMode": "subset",
+      "errorMessage": "Selected storage policy is not allowed."
+    }
+  ],
+  "expected": {
+    "valid": true
+  }
+}

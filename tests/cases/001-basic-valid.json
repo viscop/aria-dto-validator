@@ -1,0 +1,37 @@
+{
+  "name": "basic valid request",
+  "userDTO": {
+    "hostname": "app01",
+    "cpu": "4",
+    "backup": {
+      "enabled": "true"
+    }
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "hostname",
+      "type": "string",
+      "regex": "^[a-z0-9-]+$",
+      "onMissing": "fail"
+    },
+    {
+      "path": "cpu",
+      "type": "number",
+      "integerOnly": true,
+      "allowedValues": [
+        2,
+        4,
+        8
+      ]
+    },
+    {
+      "path": "backup.enabled",
+      "type": "boolean",
+      "eq": true
+    }
+  ],
+  "expected": {
+    "valid": true
+  }
+}

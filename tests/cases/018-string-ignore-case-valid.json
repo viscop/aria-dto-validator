@@ -1,0 +1,29 @@
+{
+  "name": "string ignoreCase validates allowed value",
+  "userDTO": {
+    "environment": "PROD"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "environment",
+      "type": "string",
+      "ignoreCase": true,
+      "anyOf": [
+        {
+          "const": "dev"
+        },
+        {
+          "const": "test"
+        },
+        {
+          "const": "prod"
+        }
+      ],
+      "errorMessage": "Environment is not allowed."
+    }
+  ],
+  "expected": {
+    "valid": true
+  }
+}

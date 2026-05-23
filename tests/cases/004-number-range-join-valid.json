@@ -1,0 +1,21 @@
+{
+  "name": "valid joined port range",
+  "userDTO": {
+    "portStart": "4609",
+    "portEnd": "4615"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": ["portStart", "portEnd"],
+      "join": "-",
+      "type": "number",
+      "integerOnly": true,
+      "allowedValues": ["4609-4615", 443],
+      "errorMessage": "Port range is not allowed."
+    }
+  ],
+  "expected": {
+    "valid": true
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "missing required path",
+  "userDTO": {
+    "hostname": "app01"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "costCenter",
+      "type": "string",
+      "onMissing": "fail",
+      "missingMessage": "Cost center is missing."
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorIncludes": ["Cost center is missing."]
+  }
+}

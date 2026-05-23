@@ -1,0 +1,20 @@
+{
+  "name": "invalid port against allowed values",
+  "userDTO": {
+    "port": "9000"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "port",
+      "type": "number",
+      "integerOnly": true,
+      "allowedValues": [22, 80, 443, "8000-8100"],
+      "errorMessage": "Port is not approved."
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorIncludes": ["Port is not approved."]
+  }
+}

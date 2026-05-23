@@ -1,0 +1,19 @@
+{
+  "name": "missing path can produce warning",
+  "userDTO": {
+    "hostname": "app01"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "optionalOwner",
+      "type": "string",
+      "onMissing": "warn",
+      "warningMessage": "Optional owner is not set."
+    }
+  ],
+  "expected": {
+    "valid": true,
+    "warningIncludes": ["Optional owner is not set."]
+  }
+}

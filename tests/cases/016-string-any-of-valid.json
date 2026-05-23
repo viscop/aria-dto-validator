@@ -1,0 +1,25 @@
+{
+  "name": "string anyOf accepts const or regex alternative",
+  "userDTO": {
+    "owner": "team-platform"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "owner",
+      "type": "string",
+      "anyOf": [
+        {
+          "const": "admin"
+        },
+        {
+          "regex": "^team-[a-z]+$"
+        }
+      ],
+      "errorMessage": "Owner must be admin or a valid team identifier."
+    }
+  ],
+  "expected": {
+    "valid": true
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "name": "nested object deepEqual detects nested mismatch",
+  "userDTO": {
+    "securityProfile": {
+      "name": "web-prod",
+      "rules": [
+        {
+          "protocol": "tcp",
+          "ports": [8443],
+          "source": {
+            "type": "cidr",
+            "value": "10.0.0.0/24"
+          }
+        }
+      ]
+    }
+  },
+  "backendDTO": {
+    "approvedSecurityProfiles": [
+      {
+        "name": "web-prod",
+        "rules": [
+          {
+            "protocol": "tcp",
+            "ports": [443],
+            "source": {
+              "type": "cidr",
+              "value": "10.0.0.0/24"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "policy": [
+    {
+      "type": "object",
+      "leftPath": "securityProfile",
+      "rightPath": "approvedSecurityProfiles[*]",
+      "errorMessage": "Security profile is not approved."
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorIncludes": ["Security profile is not approved."]
+  }
+}
