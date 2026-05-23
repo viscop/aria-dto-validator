@@ -70,7 +70,7 @@ var policyJson =
   '[{"path":"environment","type":"string","allowedValues":["dev","test","prod"]}]';
 var policy = JSON.parse(policyJson);
 
-var result = System.getModule("ch.org.security.validation").validate(
+var result = System.getModule("ch.org.security.validation").validateDto(
   policy,
   userDTO,
   backendDTO,
@@ -81,7 +81,7 @@ A raw JSON string is not parsed automatically by the validator. Passing the stri
 
 ```javascript
 // This is not supported directly:
-var result = System.getModule("ch.org.security.validation").validate(
+var result = System.getModule("ch.org.security.validation").validateDto(
   policyJson,
   userDTO,
   backendDTO,
@@ -129,16 +129,22 @@ for (var i = 0; i < policy.length; i++) {
   }
 }
 
-var result = System.getModule("ch.org.security.validation").validate(
+var result = System.getModule("ch.org.security.validation").validateDto(
   policy,
   userDTO,
   backendDTO,
 );
 ```
 
-This pattern keeps the policy centrally configurable while still allowing the workflow to apply context-specific validation rules before execution.
+This pattern keeps the policy centrally configurable while still allowing the workflow or action to apply context-specific validation rules before execution.
 
 ## Quick Start
+
+Before using the validator, create an Aria Orchestrator Action named `validateDto`
+in the module where you want to publish the framework, for example
+`ch.org.security.validation`. Paste the full contents of `validateDto.js` into
+that Action and configure the Action inputs as `policy`, `userDTO`, and
+`backendDTO`.
 
 ```javascript
 var userDTO = {
@@ -172,7 +178,7 @@ var policy = [
   },
 ];
 
-var result = System.getModule("ch.org.security.validation").validate(
+var result = System.getModule("ch.org.security.validation").validateDto(
   policy,
   userDTO,
 );
@@ -185,11 +191,7 @@ if (!result.valid) {
 The `validateDto` Action body/source file already includes the Action entry point:
 
 ```javascript
-var result = System.getModule("ch.org.security.validation").validate(
-  policy,
-  userDTO,
-  backendDTO,
-);
+var result = validate(policy, userDTO, backendDTO);
 return result;
 ```
 
@@ -564,7 +566,7 @@ Depending on the situation, the context contains:
 
 ## Reusable Policy Building Blocks
 
-Policies are plain JavaScript objects. This means you can define shared variables, arrays, and helper functions first, and then assign their results to policy properties such as `allowedValues`. This is useful when the same policy should be used by an Aria Automation form action and by the executing workflow.
+Policies are plain JavaScript objects. This means you can define shared variables, arrays, and helper functions first, and then assign their results to policy properties such as `allowedValues`. This is useful when the same policy should be used by an Aria Automation form action, and by the executing workflow or action.
 
 ```javascript
 var allowedEnvironments = ["dev", "test", "prod"];
@@ -618,9 +620,9 @@ var policy = [
 ];
 ```
 
-This pattern keeps the policy declarative while still allowing workflow-specific logic to decide which values are valid for a given request.
+This pattern keeps the policy declarative while still allowing workflow or action specific logic to decide which values are valid for a given request.
 
-## Complete Workflow Example
+## Complete Example
 
 ```javascript
 var allowedEnvironments = ["dev", "test", "prod"];
@@ -693,7 +695,7 @@ var policy = [
   },
 ];
 
-var result = System.getModule("ch.org.security.validation").validate(
+var result = System.getModule("ch.org.security.validation").validateDto(
   policy,
   userDTO,
   backendDTO,
@@ -708,7 +710,7 @@ return result;
 
 ## Developer Notes
 
-- Policies are plain JavaScript objects and can be built dynamically inside a workflow.
+- Policies are plain JavaScript objects and can be built dynamically inside a action or workflow.
 - The validator slightly mutates individual rule objects internally, for example by normalizing `allowedValues`. If the same policy is reused multiple times, clone it first.
 - Error messages are deduplicated. The same error message appears only once.
 - Always set `onMissing: "fail"` for required fields.
@@ -736,7 +738,7 @@ In VSCode, use:
 Terminal -> Run Task -> Run DTO Validator Tests
 ```
 
-The test cases in `tests/cases` are plain JSON files. They can also be copied into Aria Orchestrator Scriptable Tasks or test workflows if developers prefer validating behavior directly in the Aria runtime.
+The test cases in `tests/cases` are plain JSON files. They can also be copied into Aria Orchestrator Scriptable Tasks or test workflows or actions if developers prefer validating behavior directly in the Aria runtime.
 
 ## License
 
