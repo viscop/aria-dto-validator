@@ -10,6 +10,14 @@ The DTO Validator supports both use cases with the same policy format: use it in
 
 The validator also performs explicit type handling based on the policy. For example, values supplied as strings by form inputs can be validated as `number` or integer-like values in the policy, which reduces boilerplate conversion logic in form actions and workflows.
 
+## Related article
+
+I wrote a introduction to the idea behind this project here:
+
+[Policy-Based Input Validation in VMware Aria Orchestrator](https://www.visualdomain.ch/?p=112)
+
+The article explains the motivation behind the validator, shows why UI validation alone is not enough, and includes practical examples for integrating the framework into VMware Aria Automation custom form actions and Aria Orchestrator workflows.
+
 ## Table of Contents
 
 - [Usage in Aria Automation](#usage-in-aria-automation)
