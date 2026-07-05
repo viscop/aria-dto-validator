@@ -719,7 +719,7 @@ return result;
 ## Developer Notes
 
 - Policies are plain JavaScript objects and can be built dynamically inside a action or workflow.
-- The validator slightly mutates individual rule objects internally, for example by normalizing `allowedValues`. If the same policy is reused multiple times, clone it first.
+- Policies can be reused across multiple validation calls. The validator works on internal deep clones of rule objects before normalizing fields such as `allowedValues`.
 - Error messages are deduplicated. The same error message appears only once.
 - Always set `onMissing: "fail"` for required fields.
 - Prefer explicit paths for arrays, such as `items[*].name`. With `strictPath: true`, accidentally imprecise paths can be detected early.

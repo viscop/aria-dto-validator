@@ -8,6 +8,54 @@ return result;
 // ============================================================================
 
 /**
+ * Creates a deep clone of policy/rule values while preserving functions.
+ *
+ * The validator normalizes a few rule fields internally. Cloning rules at the
+ * entry point keeps caller-owned policies reusable without requiring JSON-safe
+ * cloning, which would drop function-based messages.
+ *
+ * @param {*} value
+ * @returns {*}
+ */
+function cloneRuleValue(value) {
+    var i;
+    var k;
+    var out;
+
+    if (value === null || value === undefined) return value;
+    if (typeof value !== "object") return value;
+    if (Object.prototype.toString.call(value) === "[object Date]") {
+        return new Date(value.getTime());
+    }
+    if (Object.prototype.toString.call(value) === "[object RegExp]") {
+        out = new RegExp(
+            value.source,
+            (value.global ? "g" : "") +
+            (value.ignoreCase ? "i" : "") +
+            (value.multiline ? "m" : "")
+        );
+        out.lastIndex = value.lastIndex;
+        return out;
+    }
+
+    if (Array.isArray(value)) {
+        out = [];
+        for (i = 0; i < value.length; i++) {
+            out[i] = cloneRuleValue(value[i]);
+        }
+        return out;
+    }
+
+    out = {};
+    for (k in value) {
+        if (Object.prototype.hasOwnProperty.call(value, k)) {
+            out[k] = cloneRuleValue(value[k]);
+        }
+    }
+    return out;
+}
+
+/**
  * Creates a shallow merged context object.
  *
  * Existing keys from baseCtx are copied first, then extraCtx overwrites/adds keys.
@@ -1961,9 +2009,11 @@ function validate(policy, userDTO, backendDTO) {
         throw new Error("Policy must be an array of rules");
     }
 
+    var internalPolicy = [];
     for (var i = 0; i < policy.length; i++) {
         assertRuleQuality(policy[i]);
+        internalPolicy.push(cloneRuleValue(policy[i]));
     }
 
-    return validateDtoMulti(userDTO, backendDTO, policy);
+    return validateDtoMulti(userDTO, backendDTO, internalPolicy);
 }

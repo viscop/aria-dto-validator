@@ -43,9 +43,8 @@ function resolveValidatorPath() {
 /**
  * Creates a JSON-safe deep clone.
  *
- * The validator mutates some rule objects during normalization. Cloning keeps
- * test case data isolated between executions and mirrors the plain JSON nature
- * of the test fixtures.
+ * Cloning keeps test case data isolated between executions and mirrors the
+ * plain JSON nature of the test fixtures.
  *
  * @param {*} value Value to clone.
  * @returns {*} Cloned value.
@@ -165,6 +164,51 @@ function runCase(fileName) {
 }
 
 /**
+ * Ensures the validator does not mutate caller-owned rule objects.
+ *
+ * This uses a JavaScript policy instead of a JSON fixture so function-based
+ * messages are also covered by the internal clone path.
+ *
+ * @returns {{name:string,fileName:string,result:Object,failures:Array<string>}}
+ */
+function runPolicyMutationIsolationCase() {
+    var action = createValidatorAction();
+    var messageFn = function () { return "Port must be allowed"; };
+    var policy = [
+        {
+            path: "port",
+            type: "number",
+            allowedValues: ["22", "80-90"],
+            notAllowedValues: ["23"],
+            errorMessage: messageFn
+        }
+    ];
+    var before = JSON.stringify(policy);
+    var result = action(policy, { port: 22 }, {}, systemShim);
+    var after = JSON.stringify(policy);
+    var failures = [];
+
+    if (result.valid !== true) {
+        failures.push("expected valid=true but got valid=" + result.valid);
+    }
+
+    if (after !== before) {
+        failures.push("policy was mutated from " + before + " to " + after);
+    }
+
+    if (policy[0].errorMessage !== messageFn) {
+        failures.push("function-based errorMessage was not preserved on caller policy");
+    }
+
+    return {
+        name: "policy mutation isolation",
+        fileName: "inline-policy-mutation-isolation",
+        result: result,
+        failures: failures
+    };
+}
+
+/**
  * Runs all JSON test cases and exits with a non-zero code if any case fails.
  *
  * @returns {void}
@@ -203,8 +247,20 @@ function main() {
         }
     }
 
+    var mutationOutcome = runPolicyMutationIsolationCase();
+    if (mutationOutcome.failures.length > 0) {
+        failed.push(mutationOutcome);
+        console.log("FAIL " + mutationOutcome.fileName + " - " + mutationOutcome.name);
+        for (var mf = 0; mf < mutationOutcome.failures.length; mf++) {
+            console.log("  - " + mutationOutcome.failures[mf]);
+        }
+        console.log("  result: " + JSON.stringify(mutationOutcome.result));
+    } else {
+        console.log("PASS " + mutationOutcome.fileName + " - " + mutationOutcome.name);
+    }
+
     console.log("");
-    console.log("Executed " + files.length + " test case(s), " + failed.length + " failed.");
+    console.log("Executed " + (files.length + 1) + " test case(s), " + failed.length + " failed.");
 
     if (failed.length > 0) {
         process.exit(1);
