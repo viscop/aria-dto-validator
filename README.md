@@ -37,6 +37,7 @@ The article explains the motivation behind the validator, shows why UI validatio
 - [Developer Notes](#developer-notes)
 - [Design Choice: Single Action](#design-choice-single-action)
 - [Testing](#testing)
+- [AI Disclosure](#ai-disclosure)
 - [License](#license)
 
 ## Usage in Aria Automation
@@ -747,6 +748,21 @@ Terminal -> Run Task -> Run DTO Validator Tests
 ```
 
 The test cases in `tests/cases` are plain JSON files. They can also be copied into Aria Orchestrator Scriptable Tasks or test workflows or actions if developers prefer validating behavior directly in the Aria runtime.
+
+## AI Disclosure
+
+The concept, architecture, validation model, expected behavior, API design, and
+functional requirements of this project were conceived and defined by the
+author for use in VCF Orchestrator.
+
+The implementation and project-specific automated tests were generated
+entirely using AI based on these requirements and design decisions.
+
+The generated implementation was validated through automated tests and
+functional verification. Selected parts of the source code were also reviewed
+by the author. The software is currently in production use.
+
+The documentation was created with AI assistance and reviewed by the author.
 
 ## License
 
