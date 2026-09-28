@@ -1,0 +1,20 @@
+{
+  "name": "string notAllowedValues respects ignoreCase",
+  "userDTO": {
+    "userName": "ADMIN"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "userName",
+      "type": "string",
+      "notAllowedValues": ["admin", "root", "system"],
+      "ignoreCase": true,
+      "errorMessage": "User name is reserved."
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorIncludes": ["User name is reserved."]
+  }
+}

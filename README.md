@@ -293,6 +293,21 @@ Supported options:
 | `contains`, `notContains`          | Required or forbidden substring.                            |
 | `anyOf`                            | List of alternative conditions, such as `const` or `regex`. |
 | `allowedValues`                    | List of allowed strings.                                    |
+| `notAllowedValues`                 | List of forbidden strings.                                  |
+
+`allowedValues` and `notAllowedValues` must contain only strings. Both comparisons are case-sensitive by default and respect `ignoreCase: true`.
+
+For example, this rule rejects reserved user names regardless of capitalization:
+
+```javascript
+{
+  path: "request.userName",
+  type: "string",
+  notAllowedValues: ["admin", "root", "system"],
+  ignoreCase: true,
+  errorMessage: "This user name is reserved."
+}
+```
 
 Example:
 

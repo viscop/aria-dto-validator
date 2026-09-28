@@ -1,0 +1,20 @@
+{
+  "name": "string allowedValues and notAllowedValues are both enforced",
+  "userDTO": {
+    "environment": "test"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "environment",
+      "type": "string",
+      "allowedValues": ["dev", "test", "prod"],
+      "notAllowedValues": ["test"],
+      "errorMessage": "Environment is not available."
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorIncludes": ["Environment is not available."]
+  }
+}

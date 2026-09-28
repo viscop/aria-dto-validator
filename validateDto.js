@@ -820,6 +820,46 @@ function normalizeAllowedValuesByType(list, schema) {
 }
 
 /**
+ * Checks whether a string is contained in a list of strings.
+ *
+ * @param {string} value
+ * @param {Array<string>} list
+ * @param {boolean} ignoreCase
+ * @returns {boolean}
+ */
+function isStringInValueList(value, list, ignoreCase) {
+    var candidate = ignoreCase ? value.toLowerCase() : value;
+
+    for (var i = 0; i < list.length; i++) {
+        var expected = ignoreCase ? list[i].toLowerCase() : list[i];
+        if (candidate === expected) return true;
+    }
+
+    return false;
+}
+
+/**
+ * Validates a string-list option such as allowedValues or notAllowedValues.
+ *
+ * @param {*} list
+ * @param {string} optionName
+ * @returns {{ok:boolean, msg?:string}}
+ */
+function assertStringValueListType(list, optionName) {
+    if (!Array.isArray(list)) {
+        return { ok: false, msg: optionName + " must be an array" };
+    }
+
+    for (var i = 0; i < list.length; i++) {
+        if (typeof list[i] !== "string") {
+            return { ok: false, msg: optionName + " for type:string must contain only strings" };
+        }
+    }
+
+    return { ok: true };
+}
+
+/**
  * Validates that allowedValues has a valid type/shape according to schema.type.
  *
  * @param {Object} schema
@@ -850,12 +890,7 @@ function assertAllowedValuesType(schema) {
     }
 
     if (schema.type === "string") {
-        for (var j = 0; j < schema.allowedValues.length; j++) {
-            if (typeof schema.allowedValues[j] !== "string") {
-                return { ok: false, msg: "allowedValues for type:string must contain only strings" };
-            }
-        }
-        return { ok: true };
+        return assertStringValueListType(schema.allowedValues, "allowedValues");
     }
 
     if (schema.type === "boolean" || schema.type === "date") {
@@ -1350,10 +1385,18 @@ function validateString(value, schema) {
 
         schema.allowedValues = normalizeAllowedValuesByType(schema.allowedValues, schema);
 
-        for (var a = 0; a < schema.allowedValues.length; a++) {
-            if (value === schema.allowedValues[a]) return { valid: true };
+        if (!isStringInValueList(value, schema.allowedValues, schema.ignoreCase === true)) {
+            return error("Value is not in allowedValues");
         }
-        return error("Value is not in allowedValues");
+    }
+
+    if (schema.notAllowedValues) {
+        var notAllowedCheck = assertStringValueListType(schema.notAllowedValues, "notAllowedValues");
+        if (!notAllowedCheck.ok) return error(notAllowedCheck.msg);
+
+        if (isStringInValueList(value, schema.notAllowedValues, schema.ignoreCase === true)) {
+            return error("Value is in notAllowedValues");
+        }
     }
 
     return { valid: true };
