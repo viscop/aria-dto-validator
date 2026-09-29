@@ -1,0 +1,19 @@
+{
+  "name": "string notAllowedValues rejects forbidden value",
+  "userDTO": {
+    "userName": "root"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "userName",
+      "type": "string",
+      "notAllowedValues": ["admin", "root", "system"],
+      "errorMessage": "User name is reserved."
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorIncludes": ["User name is reserved."]
+  }
+}
