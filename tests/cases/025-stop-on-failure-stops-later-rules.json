@@ -1,0 +1,28 @@
+{
+  "name": "stopOnFailure stops later rules after a failed gate",
+  "userDTO": {
+    "command": "start;whoami"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "command",
+      "type": "string",
+      "regex": "^[a-z]+$",
+      "stopOnFailure": true,
+      "errorMessage": "Command contains unsafe characters"
+    },
+    {
+      "path": "command",
+      "type": "string",
+      "allowedValues": ["start", "stop", "status"],
+      "errorMessage": "Command is not approved"
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorCount": 1,
+    "errorIncludes": ["Command contains unsafe characters"],
+    "errorExcludes": ["Command is not approved"]
+  }
+}

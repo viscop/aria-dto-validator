@@ -118,6 +118,26 @@ function containsAll(actualList, expectedFragments) {
 }
 
 /**
+ * Finds fragments that unexpectedly appear in the actual message list.
+ *
+ * @param {Array<string>} actualList Actual error or warning messages.
+ * @param {Array<string>} forbiddenFragments Fragments that must not appear.
+ * @returns {Array<string>} Forbidden fragments that were found.
+ */
+function containsAny(actualList, forbiddenFragments) {
+    var found = [];
+    var actualText = (actualList || []).join("\n");
+
+    for (var i = 0; i < forbiddenFragments.length; i++) {
+        if (actualText.indexOf(forbiddenFragments[i]) !== -1) {
+            found.push(forbiddenFragments[i]);
+        }
+    }
+
+    return found;
+}
+
+/**
  * Executes a single JSON test case.
  *
  * @param {string} fileName Test case file name relative to tests/cases.
@@ -148,11 +168,33 @@ function runCase(fileName) {
         }
     }
 
+    if (expected.errorExcludes) {
+        var unexpectedErrors = containsAny(result.errors, expected.errorExcludes);
+        for (var ue = 0; ue < unexpectedErrors.length; ue++) {
+            failures.push("unexpected error fragment: " + unexpectedErrors[ue]);
+        }
+    }
+
+    if (typeof expected.errorCount === "number" && result.errors.length !== expected.errorCount) {
+        failures.push("expected errorCount=" + expected.errorCount + " but got errorCount=" + result.errors.length);
+    }
+
     if (expected.warningIncludes) {
         var missingWarnings = containsAll(result.warnings, expected.warningIncludes);
         for (var w = 0; w < missingWarnings.length; w++) {
             failures.push("missing expected warning fragment: " + missingWarnings[w]);
         }
+    }
+
+    if (expected.warningExcludes) {
+        var unexpectedWarnings = containsAny(result.warnings, expected.warningExcludes);
+        for (var uw = 0; uw < unexpectedWarnings.length; uw++) {
+            failures.push("unexpected warning fragment: " + unexpectedWarnings[uw]);
+        }
+    }
+
+    if (typeof expected.warningCount === "number" && result.warnings.length !== expected.warningCount) {
+        failures.push("expected warningCount=" + expected.warningCount + " but got warningCount=" + result.warnings.length);
     }
 
     return {
@@ -161,6 +203,101 @@ function runCase(fileName) {
         result: result,
         failures: failures
     };
+}
+
+/**
+ * Executes one JavaScript-only context-code test.
+ *
+ * Function-based messages cannot be represented by the JSON fixtures, so these
+ * cases verify the ctx.code API directly with native JavaScript policies.
+ *
+ * @param {string} name Test name.
+ * @param {Array<Object>} policy Policy containing message callbacks.
+ * @param {Object} userDTO User input.
+ * @param {Object} backendDTO Optional backend input.
+ * @param {Array<string>} expectedErrors Exact expected error list.
+ * @returns {{name:string,fileName:string,result:Object,failures:Array<string>}}
+ */
+function runContextCodeCase(name, policy, userDTO, backendDTO, expectedErrors) {
+    var action = createValidatorAction();
+    var result = action(policy, userDTO || {}, backendDTO || {}, systemShim);
+    var actual = JSON.stringify(result.errors);
+    var expected = JSON.stringify(expectedErrors);
+    var failures = [];
+
+    if (actual !== expected) {
+        failures.push("expected errors=" + expected + " but got errors=" + actual);
+    }
+
+    return {
+        name: name,
+        fileName: "inline-" + name.replace(/\s+/g, "-"),
+        result: result,
+        failures: failures
+    };
+}
+
+/**
+ * Builds the JavaScript-only cases for stable validation context codes.
+ *
+ * @returns {Array<Object>} Executed test outcomes.
+ */
+function runContextCodeCases() {
+    function codeAndReason(ctx) {
+        return ctx.code + " | " + ctx.reason;
+    }
+
+    return [
+        runContextCodeCase(
+            "ctx code string regex",
+            [{ path: "command", type: "string", regex: "^[a-z]+$", errorMessage: codeAndReason }],
+            { command: "status;whoami" },
+            {},
+            ["string.regex | Value does not match regex"]
+        ),
+        runContextCodeCase(
+            "ctx code string allowedValues",
+            [{ path: "command", type: "string", allowedValues: ["start", "stop"], errorMessage: codeAndReason }],
+            { command: "status" },
+            {},
+            ["string.allowedValues | Value is not in allowedValues"]
+        ),
+        runContextCodeCase(
+            "ctx code number max",
+            [{ path: "cpu", type: "number", max: 8, errorMessage: codeAndReason }],
+            { cpu: 16 },
+            {},
+            ["number.max | Value is greater than max"]
+        ),
+        runContextCodeCase(
+            "ctx code missing path",
+            [{ path: "costCenter", type: "string", onMissing: "fail", missingMessage: codeAndReason }],
+            {},
+            {},
+            ["path.missing | missing"]
+        ),
+        runContextCodeCase(
+            "ctx code path resolution",
+            [{ path: "items.name", type: "string", strictPath: true, errorMessage: codeAndReason }],
+            { items: [{ name: "one" }] },
+            {},
+            ["path.resolve | pathResolveException"]
+        ),
+        runContextCodeCase(
+            "ctx code anyMatch",
+            [{ path: "tags[*]", type: "string", allowedValues: ["approved"], anyMatch: true, errorMessage: codeAndReason }],
+            { tags: ["one", "two"] },
+            {},
+            ["rule.anyMatch | anyMatch"]
+        ),
+        runContextCodeCase(
+            "ctx code object compare",
+            [{ type: "object", leftPath: "selected", rightPath: "allowed", errorMessage: codeAndReason }],
+            { selected: { name: "one" } },
+            { allowed: { name: "two" } },
+            ["object.compare | objectCompare"]
+        )
+    ];
 }
 
 /**
@@ -259,8 +396,23 @@ function main() {
         console.log("PASS " + mutationOutcome.fileName + " - " + mutationOutcome.name);
     }
 
+    var contextOutcomes = runContextCodeCases();
+    for (var c = 0; c < contextOutcomes.length; c++) {
+        var contextOutcome = contextOutcomes[c];
+        if (contextOutcome.failures.length > 0) {
+            failed.push(contextOutcome);
+            console.log("FAIL " + contextOutcome.fileName + " - " + contextOutcome.name);
+            for (var cf = 0; cf < contextOutcome.failures.length; cf++) {
+                console.log("  - " + contextOutcome.failures[cf]);
+            }
+            console.log("  result: " + JSON.stringify(contextOutcome.result));
+        } else {
+            console.log("PASS " + contextOutcome.fileName + " - " + contextOutcome.name);
+        }
+    }
+
     console.log("");
-    console.log("Executed " + (files.length + 1) + " test case(s), " + failed.length + " failed.");
+    console.log("Executed " + (files.length + 1 + contextOutcomes.length) + " test case(s), " + failed.length + " failed.");
 
     if (failed.length > 0) {
         process.exit(1);

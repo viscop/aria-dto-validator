@@ -25,6 +25,7 @@ The article explains the motivation behind the validator, shows why UI validatio
 - [Quick Start](#quick-start)
 - [Path Syntax](#path-syntax)
 - [Rule Structure](#rule-structure)
+- [Fail-Fast Validation](#fail-fast-validation)
 - [String Rules](#string-rules)
 - [Number Rules](#number-rules)
 - [Boolean Rules](#boolean-rules)
@@ -32,6 +33,7 @@ The article explains the motivation behind the validator, shows why UI validatio
 - [Object Comparison with backendDTO](#object-comparison-with-backenddto)
 - [Missing Values](#missing-values)
 - [Custom Messages](#custom-messages)
+- [Context Codes](#context-codes)
 - [Reusable Policy Building Blocks](#reusable-policy-building-blocks)
 - [Complete Workflow Example](#complete-workflow-example)
 - [Developer Notes](#developer-notes)
@@ -243,6 +245,7 @@ Common options:
 | `missingMessage` | Custom message for missing paths as a string or function.         |
 | `warningMessage` | Custom warning message for `onMissing: "warn"`.                   |
 | `strictPath`     | Requires explicit array paths.                                    |
+| `stopOnFailure`  | Stops policy evaluation when this rule produces an error.          |
 
 `anyMatch` and `noneMatch` cannot be enabled at the same time.
 
@@ -264,6 +267,36 @@ var policy = [
   },
 ];
 ```
+
+## Fail-Fast Validation
+
+Rules are evaluated in policy order. By default, validation continues after a failed rule so that all applicable errors can be returned together.
+
+Set `stopOnFailure: true` on a rule when later rules must only run after that rule succeeds. This is useful for security gates, prerequisite checks, or validations whose later steps assume that the input already has a safe format.
+
+```javascript
+var policy = [
+  {
+    path: "commandParameter",
+    type: "string",
+    regex: "^(?!-)[A-Za-z0-9._-]+$",
+    onMissing: "fail",
+    stopOnFailure: true,
+    errorMessage: "The command parameter contains unsafe characters.",
+  },
+  {
+    path: "commandParameter",
+    type: "string",
+    allowedValues: ["start", "stop", "status"],
+    onMissing: "fail",
+    errorMessage: "The command parameter is not approved.",
+  },
+];
+```
+
+If the regular expression check fails, the `allowedValues` rule is not evaluated. If the first rule succeeds, validation continues with the allowlist check.
+
+`stopOnFailure` applies only to errors produced by the current rule. Warnings do not stop evaluation. If the option is omitted or set to `false`, the existing error-collection behavior is preserved. The validator still checks the structure of the complete policy before evaluating DTO values, so malformed later rules are rejected even when an earlier validation rule would stop evaluation.
 
 ## String Rules
 
@@ -568,11 +601,20 @@ Possible values:
 
 ```javascript
 {
-  path: "cpu",
-  type: "number",
-  max: 8,
+  path: "commandParameter",
+  type: "string",
+  regex: "^(?!-)[A-Za-z0-9._-]+$",
+  allowedValues: ["start", "stop", "status"],
   errorMessage: function (ctx) {
-    return "CPU value is invalid: " + ctx.reason;
+    if (ctx.code === "string.regex") {
+      return "The command parameter contains unsafe characters.";
+    }
+
+    if (ctx.code === "string.allowedValues") {
+      return "The command parameter is not approved.";
+    }
+
+    return "The command parameter is invalid: " + ctx.reason;
   }
 }
 ```
@@ -586,7 +628,89 @@ Depending on the situation, the context contains:
 | `backendDTO`      | The full backend DTO.                      |
 | `value`           | The validated value, if available.         |
 | `path` / `paths`  | Affected path or path list.                |
+| `code`             | Stable, machine-readable validation code.  |
 | `reason`          | Technical reason for the validation error. |
+
+Use `ctx.code` when message behavior depends on the failed validation. Codes are part of the public policy interface and are intended for programmatic comparisons. `ctx.reason` is a human-readable technical description and may contain additional details, so it should primarily be used for diagnostics or as a fallback message.
+
+When a rule contains several constraints, they are checked in their documented implementation order and validation returns from that rule after its first failed constraint. For example, a string rule checks `regex` before `allowedValues`. The callback therefore receives `string.regex` when the format is unsafe, or `string.allowedValues` when the format is valid but the value is not in the allowlist.
+
+## Context Codes
+
+Context codes identify why a message callback was invoked. Type-specific codes describe value validation failures. Rule, path, and object codes describe policy-level or resolution failures.
+
+### String Codes
+
+| Code                      | Meaning                                      |
+| ------------------------- | -------------------------------------------- |
+| `string.empty`            | The value is null or empty.                  |
+| `string.type`             | The value is not a string.                   |
+| `string.minLength`        | The value is shorter than `minLength`.       |
+| `string.maxLength`        | The value is longer than `maxLength`.        |
+| `string.length`           | The value does not have the required length. |
+| `string.regex`            | The value does not match `regex`.            |
+| `string.eq`               | The value does not satisfy `eq`.             |
+| `string.neq`              | The value does not satisfy `neq`.            |
+| `string.startsWith`       | The value does not have the required prefix. |
+| `string.endsWith`         | The value does not have the required suffix. |
+| `string.contains`         | A required substring is missing.             |
+| `string.notContains`      | A forbidden substring is present.            |
+| `string.anyOf`            | No `anyOf` condition matched.                |
+| `string.allowedValues`    | The value is not in `allowedValues`.         |
+| `string.notAllowedValues` | The value is in `notAllowedValues`.          |
+
+### Number Codes
+
+| Code                                  | Meaning                                                        |
+| ------------------------------------- | -------------------------------------------------------------- |
+| `number.empty`                        | The value is null or empty.                                    |
+| `number.format`                       | The value does not use a supported numeric format.             |
+| `number.type`                         | The value cannot be interpreted as a number.                   |
+| `number.integerOnly`                  | The value is not an integer.                                   |
+| `number.min` / `number.max`           | The value is outside the inclusive minimum or maximum.         |
+| `number.gt` / `number.gte`            | The value does not satisfy the configured lower comparison.    |
+| `number.lt` / `number.lte`            | The value does not satisfy the configured upper comparison.    |
+| `number.eq` / `number.neq`            | The value does not satisfy the equality comparison.            |
+| `number.multipleOf`                   | The value is not a multiple of the configured number.          |
+| `number.allowedValues`                | The value or range is not covered by `allowedValues`.          |
+| `number.allowedValues.invalid`        | `allowedValues` is empty or cannot form valid intervals.       |
+| `number.notAllowedValues`             | The value is covered by `notAllowedValues`.                    |
+| `number.range.format`                 | A range input has an invalid format.                           |
+| `number.range.allowedValuesRequired`  | A range input was used without `allowedValues`.                |
+| `number.range.comparisonConflict`     | Range input was combined with an incompatible comparison rule. |
+
+### Boolean and Date Codes
+
+| Code                                      | Meaning                                                |
+| ----------------------------------------- | ------------------------------------------------------ |
+| `boolean.format`                          | A string or number is not a supported boolean format. |
+| `boolean.type`                            | The value is not a boolean after coercion.             |
+| `boolean.eq` / `boolean.neq`              | The value does not satisfy the equality comparison.    |
+| `date.empty`                              | The date value is null or empty.                       |
+| `date.format`                             | A date string cannot be parsed.                        |
+| `date.type`                               | The value does not use a supported date type.          |
+| `date.offset`                             | The date is outside the allowed offset tolerance.      |
+| `date.eq`                                 | The date does not equal the configured date.           |
+| `date.min` / `date.max`                   | The date is outside a configured boundary.             |
+| `date.max.invalid`                        | The configured maximum date is invalid.                |
+| `date.gt` / `date.gte`                    | The date does not satisfy the lower comparison.        |
+| `date.lt` / `date.lte`                    | The date does not satisfy the upper comparison.        |
+
+### Rule, Path, and Object Codes
+
+| Code                            | Meaning                                                       |
+| ------------------------------- | ------------------------------------------------------------- |
+| `path.missing`                  | A configured path did not resolve and `onMissing` handled it. |
+| `path.resolve`                  | A normal or multi-path expression could not be resolved.      |
+| `path.joinResolve`              | A joined path expression could not be resolved.               |
+| `rule.anyMatch`                 | No resolved value satisfied an `anyMatch` rule.               |
+| `rule.noneMatch`                | A resolved value satisfied a `noneMatch` rule.                |
+| `rule.allowedValues.invalid`    | `allowedValues` has an unsupported shape or entry type.       |
+| `rule.notAllowedValues.invalid` | `notAllowedValues` has an unsupported shape or entry type.    |
+| `object.compare`                | An object comparison failed.                                  |
+| `object.compareException`       | An object comparison raised an exception.                     |
+
+For aggregate rules, the callback receives the aggregate code. For example, a failed `anyMatch` rule reports `rule.anyMatch`, even when the individual values failed because of `string.regex` or `string.allowedValues`. Use separate rules when each underlying constraint needs its own final message.
 
 ## Reusable Policy Building Blocks
 

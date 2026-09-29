@@ -1,0 +1,29 @@
+{
+  "name": "rules still collect errors without stopOnFailure",
+  "userDTO": {
+    "command": "restart;whoami"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "command",
+      "type": "string",
+      "regex": "^[a-z]+$",
+      "errorMessage": "Command contains unsafe characters"
+    },
+    {
+      "path": "command",
+      "type": "string",
+      "allowedValues": ["start", "stop", "status"],
+      "errorMessage": "Command is not approved"
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorCount": 2,
+    "errorIncludes": [
+      "Command contains unsafe characters",
+      "Command is not approved"
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "stopOnFailure detects a deduplicated error",
+  "userDTO": {
+    "first": "invalid",
+    "second": "invalid",
+    "third": "invalid"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "first",
+      "type": "string",
+      "allowedValues": ["valid"],
+      "errorMessage": "Shared validation error"
+    },
+    {
+      "path": "second",
+      "type": "string",
+      "allowedValues": ["valid"],
+      "stopOnFailure": true,
+      "errorMessage": "Shared validation error"
+    },
+    {
+      "path": "third",
+      "type": "string",
+      "allowedValues": ["valid"],
+      "errorMessage": "Later validation error"
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorCount": 1,
+    "errorIncludes": ["Shared validation error"],
+    "errorExcludes": ["Later validation error"]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "stopOnFailure does not stop after a warning",
+  "userDTO": {
+    "environment": "invalid"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "optionalOwner",
+      "type": "string",
+      "onMissing": "warn",
+      "stopOnFailure": true,
+      "warningMessage": "Optional owner is missing"
+    },
+    {
+      "path": "environment",
+      "type": "string",
+      "allowedValues": ["dev", "test", "prod"],
+      "errorMessage": "Environment is invalid"
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorCount": 1,
+    "warningCount": 1,
+    "errorIncludes": ["Environment is invalid"],
+    "warningIncludes": ["Optional owner is missing"]
+  }
+}

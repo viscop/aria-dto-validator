@@ -1,0 +1,28 @@
+{
+  "name": "later rules run when stopOnFailure gate passes",
+  "userDTO": {
+    "command": "restart"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "command",
+      "type": "string",
+      "regex": "^[a-z]+$",
+      "stopOnFailure": true,
+      "errorMessage": "Command contains unsafe characters"
+    },
+    {
+      "path": "command",
+      "type": "string",
+      "allowedValues": ["start", "stop", "status"],
+      "errorMessage": "Command is not approved"
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorCount": 1,
+    "errorIncludes": ["Command is not approved"],
+    "errorExcludes": ["Command contains unsafe characters"]
+  }
+}

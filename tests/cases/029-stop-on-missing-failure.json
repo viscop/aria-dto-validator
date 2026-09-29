@@ -1,0 +1,28 @@
+{
+  "name": "stopOnFailure stops after onMissing fail",
+  "userDTO": {
+    "environment": "invalid"
+  },
+  "backendDTO": {},
+  "policy": [
+    {
+      "path": "requiredOwner",
+      "type": "string",
+      "onMissing": "fail",
+      "stopOnFailure": true,
+      "missingMessage": "Required owner is missing"
+    },
+    {
+      "path": "environment",
+      "type": "string",
+      "allowedValues": ["dev", "test", "prod"],
+      "errorMessage": "Environment is invalid"
+    }
+  ],
+  "expected": {
+    "valid": false,
+    "errorCount": 1,
+    "errorIncludes": ["Required owner is missing"],
+    "errorExcludes": ["Environment is invalid"]
+  }
+}

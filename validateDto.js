@@ -199,6 +199,7 @@ function validateObjectPair(rule, userDTO, backendDTO) {
                 schema: rule,
                 userDTO: userDTO,
                 backendDTO: backendDTO,
+                code: "object.compare",
                 reason: msg
             })
         };
@@ -1191,23 +1192,25 @@ function validateAllowedValuesCoverage(value, schema) {
     /**
      * Creates a failed coverage result using the schema's configured message.
      *
+     * @param {string} code
      * @param {string} msg
      * @returns {{valid:boolean, error:string}}
      */
-    function err(msg) {
+    function err(code, msg) {
         return {
             valid: false,
             error: resolveErrorMessage(schema, msg, {
                 rule: schema,
                 schema: schema,
                 value: value,
+                code: code,
                 reason: msg
             })
         };
     }
 
     if (!schema.allowedValues || !Array.isArray(schema.allowedValues)) {
-        return err("allowedValues must be an array");
+        return err("rule.allowedValues.invalid", "allowedValues must be an array");
     }
 
     schema.allowedValues = normalizeAllowedValues(schema.allowedValues);
@@ -1216,28 +1219,28 @@ function validateAllowedValuesCoverage(value, schema) {
 
     var intervals = parseAllowedIntervals(schema.allowedValues, integerMode);
     if (!intervals || intervals.length === 0) {
-        return err("allowedValues is empty or invalid");
+        return err("number.allowedValues.invalid", "allowedValues is empty or invalid");
     }
 
     if (typeof value === "string" && isNumberRangeString(value)) {
         var r = parseRangeString(value);
-        if (!r) return err("Invalid range format");
+        if (!r) return err("number.range.format", "Invalid range format");
 
         if (!isRangeFullyCovered(r.min, r.max, intervals, integerMode)) {
-            return err("Range is not fully covered by allowedValues");
+            return err("number.allowedValues", "Range is not fully covered by allowedValues");
         }
         return ok();
     }
 
     var num = value;
     if (typeof num !== "number") {
-        if (typeof num !== "string" || !/^\d+(\.\d+)?$/.test(num)) return err("Value is not a valid number format");
+        if (typeof num !== "string" || !/^\d+(\.\d+)?$/.test(num)) return err("number.format", "Value is not a valid number format");
         num = parseFloat(num);
-        if (isNaN(num)) return err("Value is not a number");
+        if (isNaN(num)) return err("number.type", "Value is not a number");
     }
 
     if (!isPointCovered(num, intervals)) {
-        return err("Value is not covered by allowedValues");
+        return err("number.allowedValues", "Value is not covered by allowedValues");
     }
 
     return ok();
@@ -1275,16 +1278,18 @@ function validateString(value, schema) {
     /**
      * Creates a failed string-validation result using the schema's configured message.
      *
+     * @param {string} code
      * @param {string} message
      * @returns {{valid:boolean, error:string}}
      */
-    function error(message) {
+    function error(code, message) {
         return {
             valid: false,
             error: resolveErrorMessage(schema, message, {
                 rule: schema,
                 schema: schema,
                 value: value,
+                code: code,
                 reason: message
             })
         };
@@ -1299,63 +1304,63 @@ function validateString(value, schema) {
 
     if (value === null || value === "") {
         if (schema.nullOrEmpty === true) return { valid: true };
-        return error("Value is null or empty");
+        return error("string.empty", "Value is null or empty");
     }
 
     if (typeof value !== "string") {
-        return error("Value is not a string");
+        return error("string.type", "Value is not a string");
     }
 
     if (schema.trim) value = value.trim();
 
-    if (schema.minLength && value.length < schema.minLength) return error("Value is shorter than minLength");
-    if (schema.maxLength && value.length > schema.maxLength) return error("Value is longer than maxLength");
-    if (schema.length !== undefined && value.length !== schema.length) return error("Value does not match required length");
+    if (schema.minLength && value.length < schema.minLength) return error("string.minLength", "Value is shorter than minLength");
+    if (schema.maxLength && value.length > schema.maxLength) return error("string.maxLength", "Value is longer than maxLength");
+    if (schema.length !== undefined && value.length !== schema.length) return error("string.length", "Value does not match required length");
 
     if (schema.regex) {
         var regexFlags = schema.ignoreCase ? "i" : "";
         var pattern = extractPattern(schema.regex, regexFlags);
-        if (!pattern.test(value)) return error("Value does not match regex");
+        if (!pattern.test(value)) return error("string.regex", "Value does not match regex");
     }
 
     if (schema.eq !== undefined) {
         if (schema.ignoreCase && typeof schema.eq === "string") {
-            if (value.toLowerCase() !== schema.eq.toLowerCase()) return error("Value does not equal expected string (case-insensitive)");
+            if (value.toLowerCase() !== schema.eq.toLowerCase()) return error("string.eq", "Value does not equal expected string (case-insensitive)");
         } else {
-            if (value !== schema.eq) return error("Value does not equal expected string");
+            if (value !== schema.eq) return error("string.eq", "Value does not equal expected string");
         }
     }
 
     if (schema.neq !== undefined) {
         if (schema.ignoreCase && typeof schema.neq === "string") {
-            if (value.toLowerCase() === schema.neq.toLowerCase()) return error("Value must not equal disallowed string (case-insensitive)");
+            if (value.toLowerCase() === schema.neq.toLowerCase()) return error("string.neq", "Value must not equal disallowed string (case-insensitive)");
         } else {
-            if (value === schema.neq) return error("Value must not equal disallowed string");
+            if (value === schema.neq) return error("string.neq", "Value must not equal disallowed string");
         }
     }
 
     if (schema.startsWith !== undefined) {
         var target = schema.ignoreCase ? value.toLowerCase() : value;
         var compare = schema.ignoreCase ? schema.startsWith.toLowerCase() : schema.startsWith;
-        if (!target.startsWith(compare)) return error("Value does not start with expected string");
+        if (!target.startsWith(compare)) return error("string.startsWith", "Value does not start with expected string");
     }
 
     if (schema.endsWith !== undefined) {
         var target2 = schema.ignoreCase ? value.toLowerCase() : value;
         var compare2 = schema.ignoreCase ? schema.endsWith.toLowerCase() : schema.endsWith;
-        if (!target2.endsWith(compare2)) return error("Value does not end with expected string");
+        if (!target2.endsWith(compare2)) return error("string.endsWith", "Value does not end with expected string");
     }
 
     if (schema.contains !== undefined) {
         var target3 = schema.ignoreCase ? value.toLowerCase() : value;
         var compare3 = schema.ignoreCase ? schema.contains.toLowerCase() : schema.contains;
-        if (target3.indexOf(compare3) === -1) return error("Value does not contain expected substring");
+        if (target3.indexOf(compare3) === -1) return error("string.contains", "Value does not contain expected substring");
     }
 
     if (schema.notContains !== undefined) {
         var target4 = schema.ignoreCase ? value.toLowerCase() : value;
         var compare4 = schema.ignoreCase ? schema.notContains.toLowerCase() : schema.notContains;
-        if (target4.indexOf(compare4) !== -1) return error("Value must not contain disallowed substring");
+        if (target4.indexOf(compare4) !== -1) return error("string.notContains", "Value must not contain disallowed substring");
     }
 
     if (schema.anyOf) {
@@ -1376,26 +1381,26 @@ function validateString(value, schema) {
             }
             if (cond.type === "string") { match = true; break; }
         }
-        if (!match) return error("Value does not match anyOf conditions");
+        if (!match) return error("string.anyOf", "Value does not match anyOf conditions");
     }
 
     if (schema.allowedValues) {
         var chk = assertAllowedValuesType(schema);
-        if (!chk.ok) return error(chk.msg);
+        if (!chk.ok) return error("rule.allowedValues.invalid", chk.msg);
 
         schema.allowedValues = normalizeAllowedValuesByType(schema.allowedValues, schema);
 
         if (!isStringInValueList(value, schema.allowedValues, schema.ignoreCase === true)) {
-            return error("Value is not in allowedValues");
+            return error("string.allowedValues", "Value is not in allowedValues");
         }
     }
 
     if (schema.notAllowedValues) {
         var notAllowedCheck = assertStringValueListType(schema.notAllowedValues, "notAllowedValues");
-        if (!notAllowedCheck.ok) return error(notAllowedCheck.msg);
+        if (!notAllowedCheck.ok) return error("rule.notAllowedValues.invalid", notAllowedCheck.msg);
 
         if (isStringInValueList(value, schema.notAllowedValues, schema.ignoreCase === true)) {
-            return error("Value is in notAllowedValues");
+            return error("string.notAllowedValues", "Value is in notAllowedValues");
         }
     }
 
@@ -1415,16 +1420,18 @@ function validateNumber(value, schema) {
     /**
      * Creates a failed number-validation result using the schema's configured message.
      *
+     * @param {string} code
      * @param {string} message
      * @returns {{valid:boolean, error:string}}
      */
-    function error(message) {
+    function error(code, message) {
         return {
             valid: false,
             error: resolveErrorMessage(schema, message, {
                 rule: schema,
                 schema: schema,
                 value: value,
+                code: code,
                 reason: message
             })
         };
@@ -1432,7 +1439,7 @@ function validateNumber(value, schema) {
 
     if (value === null || value === "") {
         if (schema.nullOrEmpty === true) return { valid: true };
-        return error("Value is null or empty");
+        return error("number.empty", "Value is null or empty");
     }
 
     var allowRange = (schema.allowRangeInput === true) ||
@@ -1440,16 +1447,16 @@ function validateNumber(value, schema) {
 
     // Range input is validated as coverage against allowedValues, not as one scalar number.
     if (allowRange && typeof value === "string" && isNumberRangeString(value)) {
-        if (!schema.allowedValues) return error("Range input requires allowedValues");
+        if (!schema.allowedValues) return error("number.range.allowedValuesRequired", "Range input requires allowedValues");
 
         if (schema.gt !== undefined || schema.gte !== undefined || schema.lt !== undefined || schema.lte !== undefined ||
             schema.min !== undefined || schema.max !== undefined || schema.eq !== undefined || schema.neq !== undefined ||
             schema.multipleOf !== undefined) {
-            return error("Range input cannot be combined with numeric comparisons (gt/lt/min/max/eq/neq/multipleOf)");
+            return error("number.range.comparisonConflict", "Range input cannot be combined with numeric comparisons (gt/lt/min/max/eq/neq/multipleOf)");
         }
 
         var chkR = assertAllowedValuesType(schema);
-        if (!chkR.ok) return error(chkR.msg);
+        if (!chkR.ok) return error("rule.allowedValues.invalid", chkR.msg);
 
         schema.allowedValues = normalizeAllowedValuesByType(schema.allowedValues, schema);
 
@@ -1458,33 +1465,33 @@ function validateNumber(value, schema) {
 
     if (typeof value !== "number") {
         if (typeof value !== "string" || !/^\d+(\.\d+)?$/.test(value)) {
-            return error("Value is not a valid number format");
+            return error("number.format", "Value is not a valid number format");
         }
         var parsed = parseFloat(value);
-        if (isNaN(parsed)) return error("Value is not a number");
+        if (isNaN(parsed)) return error("number.type", "Value is not a number");
         value = parsed;
     }
 
-    if (schema.integerOnly === true && value % 1 !== 0) return error("Value must be an integer");
+    if (schema.integerOnly === true && value % 1 !== 0) return error("number.integerOnly", "Value must be an integer");
 
     if (schema.between && schema.between.length === 2) {
         schema.min = parseFloat(schema.between[0]);
         schema.max = parseFloat(schema.between[1]);
     }
 
-    if (schema.min !== undefined && value < parseFloat(schema.min)) return error("Value is less than min");
-    if (schema.max !== undefined && value > parseFloat(schema.max)) return error("Value is greater than max");
-    if (schema.gt !== undefined && !(value > parseFloat(schema.gt))) return error("Value must be greater than gt");
-    if (schema.gte !== undefined && !(value >= parseFloat(schema.gte))) return error("Value must be greater or equal to gte");
-    if (schema.lt !== undefined && !(value < parseFloat(schema.lt))) return error("Value must be less than lt");
-    if (schema.lte !== undefined && !(value <= parseFloat(schema.lte))) return error("Value must be less or equal to lte");
-    if (schema.eq !== undefined && value !== parseFloat(schema.eq)) return error("Value must equal eq");
-    if (schema.neq !== undefined && value === parseFloat(schema.neq)) return error("Value must not equal neq");
-    if (schema.multipleOf !== undefined && value % parseFloat(schema.multipleOf) !== 0) return error("Value must be a multipleOf " + schema.multipleOf);
+    if (schema.min !== undefined && value < parseFloat(schema.min)) return error("number.min", "Value is less than min");
+    if (schema.max !== undefined && value > parseFloat(schema.max)) return error("number.max", "Value is greater than max");
+    if (schema.gt !== undefined && !(value > parseFloat(schema.gt))) return error("number.gt", "Value must be greater than gt");
+    if (schema.gte !== undefined && !(value >= parseFloat(schema.gte))) return error("number.gte", "Value must be greater or equal to gte");
+    if (schema.lt !== undefined && !(value < parseFloat(schema.lt))) return error("number.lt", "Value must be less than lt");
+    if (schema.lte !== undefined && !(value <= parseFloat(schema.lte))) return error("number.lte", "Value must be less or equal to lte");
+    if (schema.eq !== undefined && value !== parseFloat(schema.eq)) return error("number.eq", "Value must equal eq");
+    if (schema.neq !== undefined && value === parseFloat(schema.neq)) return error("number.neq", "Value must not equal neq");
+    if (schema.multipleOf !== undefined && value % parseFloat(schema.multipleOf) !== 0) return error("number.multipleOf", "Value must be a multipleOf " + schema.multipleOf);
 
     if (schema.allowedValues) {
         var chk = assertAllowedValuesType(schema);
-        if (!chk.ok) return error(chk.msg);
+        if (!chk.ok) return error("rule.allowedValues.invalid", chk.msg);
 
         schema.allowedValues = normalizeAllowedValuesByType(schema.allowedValues, schema);
 
@@ -1495,7 +1502,7 @@ function validateNumber(value, schema) {
     if (schema.notAllowedValues) {
         schema.notAllowedValues = normalizeAllowedValues(schema.notAllowedValues);
         if (isValueInRangeList(value, schema.notAllowedValues, schema)) {
-            return error("Value is in notAllowedValues");
+            return error("number.notAllowedValues", "Value is in notAllowedValues");
         }
     }
 
@@ -1515,16 +1522,18 @@ function validateBoolean(value, schema) {
     /**
      * Creates a failed boolean-validation result using the schema's configured message.
      *
+     * @param {string} code
      * @param {string} message
      * @returns {{valid:boolean, error:string}}
      */
-    function error(message) {
+    function error(code, message) {
         return {
             valid: false,
             error: resolveErrorMessage(schema, message, {
                 rule: schema,
                 schema: schema,
                 value: value,
+                code: code,
                 reason: message
             })
         };
@@ -1534,19 +1543,19 @@ function validateBoolean(value, schema) {
         var v = value.toLowerCase();
         if (v === "true" || v === "1") value = true;
         else if (v === "false" || v === "0") value = false;
-        else return error("Invalid boolean string");
+        else return error("boolean.format", "Invalid boolean string");
     }
 
     if (typeof value === "number") {
         if (value === 1) value = true;
         else if (value === 0) value = false;
-        else return error("Invalid numeric boolean");
+        else return error("boolean.format", "Invalid numeric boolean");
     }
 
-    if (typeof value !== "boolean") return error("Value is not a boolean");
+    if (typeof value !== "boolean") return error("boolean.type", "Value is not a boolean");
 
-    if (schema.eq !== undefined && value !== schema.eq) return error("Boolean does not match expected value");
-    if (schema.neq !== undefined && value === schema.neq) return error("Boolean must not match disallowed value");
+    if (schema.eq !== undefined && value !== schema.eq) return error("boolean.eq", "Boolean does not match expected value");
+    if (schema.neq !== undefined && value === schema.neq) return error("boolean.neq", "Boolean must not match disallowed value");
 
     return { valid: true };
 }
@@ -1564,16 +1573,18 @@ function validateDate(value, schema) {
     /**
      * Creates a failed date-validation result using the schema's configured message.
      *
+     * @param {string} code
      * @param {string} message
      * @returns {{valid:boolean, error:string}}
      */
-    function error(message) {
+    function error(code, message) {
         return {
             valid: false,
             error: resolveErrorMessage(schema, message, {
                 rule: schema,
                 schema: schema,
                 value: value,
+                code: code,
                 reason: message
             })
         };
@@ -1581,7 +1592,7 @@ function validateDate(value, schema) {
 
     if (value === null || value === "") {
         if (schema.nullOrEmpty === true) return { valid: true };
-        return error("Date value is null or empty");
+        return error("date.empty", "Date value is null or empty");
     }
 
     var dateObj = null;
@@ -1590,10 +1601,10 @@ function validateDate(value, schema) {
         dateObj = value;
     } else if (typeof value === "string") {
         var parsedDate = new Date(value);
-        if (isNaN(parsedDate.getTime())) return error("Invalid date string");
+        if (isNaN(parsedDate.getTime())) return error("date.format", "Invalid date string");
         dateObj = parsedDate;
     } else {
-        return error("Unsupported date format");
+        return error("date.type", "Unsupported date format");
     }
 
     var now = new Date();
@@ -1615,7 +1626,7 @@ function validateDate(value, schema) {
         var actualTime = dateObj.getTime();
         var tolerance = typeof schema.offsetTolerance === "number" ? schema.offsetTolerance : 0;
         var delta = Math.abs(actualTime - targetTime);
-        if (delta > tolerance) return error("Date is outside of allowed offset tolerance");
+        if (delta > tolerance) return error("date.offset", "Date is outside of allowed offset tolerance");
     }
 
     if (schema.eq) {
@@ -1625,12 +1636,12 @@ function validateDate(value, schema) {
             var eqParsed = new Date(schema.eq);
             if (!isNaN(eqParsed.getTime())) eqDate = eqParsed;
         }
-        if (!eqDate || dateObj.getTime() !== eqDate.getTime()) return error("Date must equal expected value");
+        if (!eqDate || dateObj.getTime() !== eqDate.getTime()) return error("date.eq", "Date must equal expected value");
     }
 
     if (schema.min) {
         var minDate = Object.prototype.toString.call(schema.min) === "[object Date]" ? schema.min : new System.getDateFromFormat(schema.min);
-        if (isNaN(minDate.getTime()) || dateObj < minDate) return error("Date is before minimum allowed");
+        if (isNaN(minDate.getTime()) || dateObj < minDate) return error("date.min", "Date is before minimum allowed");
     }
 
     if (schema.max) {
@@ -1638,14 +1649,14 @@ function validateDate(value, schema) {
             ? new Date(schema.max)
             : new Date(System.getDateFromFormat(schema.max));
 
-        if (isNaN(maxDate.getTime())) return error("Invalid max date");
-        if (dateObj > maxDate) return error("Date is after maximum allowed");
+        if (isNaN(maxDate.getTime())) return error("date.max.invalid", "Invalid max date");
+        if (dateObj > maxDate) return error("date.max", "Date is after maximum allowed");
     }
 
-    if (schema.gt && !(dateObj > compareTo)) return error("Date must be greater than reference");
-    if (schema.gte && !(dateObj >= compareTo)) return error("Date must be greater than or equal to reference");
-    if (schema.lt && !(dateObj < compareTo)) return error("Date must be less than reference");
-    if (schema.lte && !(dateObj <= compareTo)) return error("Date must be less than or equal to reference");
+    if (schema.gt && !(dateObj > compareTo)) return error("date.gt", "Date must be greater than reference");
+    if (schema.gte && !(dateObj >= compareTo)) return error("date.gte", "Date must be greater than or equal to reference");
+    if (schema.lt && !(dateObj < compareTo)) return error("date.lt", "Date must be less than reference");
+    if (schema.lte && !(dateObj <= compareTo)) return error("date.lte", "Date must be less than or equal to reference");
 
     return { valid: true };
 }
@@ -1717,6 +1728,7 @@ function coerceValueByType(value, schema) {
 function validateDtoMulti(userDTO, backendDTO, rules) {
     var allErrors = [];
     var allWarnings = [];
+    var errorEventCount = 0;
 
     /**
      * Adds a non-empty message once to the target message list.
@@ -1729,6 +1741,19 @@ function validateDtoMulti(userDTO, backendDTO, rules) {
         if (msg === null || msg === undefined) return;
         msg = String(msg);
         if (arr.indexOf(msg) === -1) arr.push(msg);
+    }
+
+    /**
+     * Records a validation error while keeping the public error list deduplicated.
+     * The separate event counter allows stopOnFailure to detect a failed rule even
+     * when that rule produces the same message as an earlier rule.
+     *
+     * @param {*} msg
+     * @returns {void}
+     */
+    function addError(msg) {
+        errorEventCount++;
+        addUnique(allErrors, msg);
     }
 
     /**
@@ -1755,8 +1780,7 @@ function validateDtoMulti(userDTO, backendDTO, rules) {
      * @returns {void}
      */
     function addRuleError(rule, fallback, extraCtx) {
-        addUnique(
-            allErrors,
+        addError(
             resolveErrorMessage(rule, fallback, mergeContext(getRuleBaseContext(rule), extraCtx))
         );
     }
@@ -1788,11 +1812,12 @@ function validateDtoMulti(userDTO, backendDTO, rules) {
         var ctx = mergeContext(getRuleBaseContext(rule), {
             path: pathsText,
             paths: pathsText,
+            code: "path.missing",
             reason: "missing"
         });
 
         if (onMissing === "fail") {
-            addUnique(allErrors, resolveMissingMessage(rule, "Missing path(s): " + pathsText, ctx));
+            addError(resolveMissingMessage(rule, "Missing path(s): " + pathsText, ctx));
         } else if (onMissing === "warn") {
             addUnique(allWarnings, resolveWarningMessage(rule, "Missing path(s) (warn): " + pathsText, ctx));
         }
@@ -1837,6 +1862,7 @@ function validateDtoMulti(userDTO, backendDTO, rules) {
                     values: values,
                     path: labelForMissing,
                     paths: labelForMissing,
+                    code: "rule.noneMatch",
                     reason: "noneMatch"
                 });
             }
@@ -1849,6 +1875,7 @@ function validateDtoMulti(userDTO, backendDTO, rules) {
                     values: values,
                     path: labelForMissing,
                     paths: labelForMissing,
+                    code: "rule.anyMatch",
                     reason: "anyMatch"
                 });
             }
@@ -1856,12 +1883,17 @@ function validateDtoMulti(userDTO, backendDTO, rules) {
         }
 
         for (var e = 0; e < invalidErrors.length; e++) {
-            addUnique(allErrors, invalidErrors[e]);
+            addError(invalidErrors[e]);
         }
     }
 
-    for (var r = 0; r < rules.length; r++) {
-        var rule = rules[r];
+    /**
+     * Evaluates one policy rule.
+     *
+     * @param {Object} rule
+     * @returns {void}
+     */
+    function evaluateRule(rule) {
         var strict = rule.strictPath === true;
 
         // Object rules compare selected userDTO values against backendDTO values.
@@ -1870,16 +1902,18 @@ function validateDtoMulti(userDTO, backendDTO, rules) {
                 var objRes = validateObjectPair(rule, userDTO, backendDTO);
                 if (!objRes || objRes.valid !== true) {
                     addRuleError(rule, (objRes && objRes.error) || "Object compare failed", {
+                        code: "object.compare",
                         reason: "objectCompare"
                     });
                 }
             } catch (eObj) {
                 addRuleError(rule, eObj.message, {
                     error: eObj,
+                    code: "object.compareException",
                     reason: "objectCompareException"
                 });
             }
-            continue;
+            return;
         }
 
         // Joined paths are resolved together, for example portStart + portEnd.
@@ -1892,13 +1926,14 @@ function validateDtoMulti(userDTO, backendDTO, rules) {
                     error: eJoin,
                     path: rule.path,
                     paths: rule.path,
+                    code: "path.joinResolve",
                     reason: "joinResolveException"
                 });
-                continue;
+                return;
             }
 
             evalValuesAgainstRule(rule, joinedValues, rule.path.join(", "));
-            continue;
+            return;
         }
 
         // Multiple paths without join are flattened and evaluated as one value set.
@@ -1917,6 +1952,7 @@ function validateDtoMulti(userDTO, backendDTO, rules) {
                         error: ePath,
                         path: onePath,
                         paths: rule.path,
+                        code: "path.resolve",
                         reason: "pathResolveException"
                     });
                     continue;
@@ -1928,11 +1964,11 @@ function validateDtoMulti(userDTO, backendDTO, rules) {
 
             if (!hadAny) {
                 addMissing(rule, rule.path.join(", "));
-                continue;
+                return;
             }
 
             evalValuesAgainstRule(rule, flat, rule.path.join(", "));
-            continue;
+            return;
         }
 
         var values = [];
@@ -1942,12 +1978,24 @@ function validateDtoMulti(userDTO, backendDTO, rules) {
             addRuleError(rule, eSingle.message, {
                 error: eSingle,
                 path: rule.path,
+                code: "path.resolve",
                 reason: "pathResolveException"
             });
-            continue;
+            return;
         }
 
         evalValuesAgainstRule(rule, values, String(rule.path));
+    }
+
+    for (var r = 0; r < rules.length; r++) {
+        var rule = rules[r];
+        var errorsBeforeRule = errorEventCount;
+
+        evaluateRule(rule);
+
+        if (rule.stopOnFailure === true && errorEventCount > errorsBeforeRule) {
+            break;
+        }
     }
 
     return {
@@ -1988,6 +2036,10 @@ function assertRuleQuality(rule) {
         typeof rule.warningMessage !== "string" &&
         typeof rule.warningMessage !== "function") {
         throw new Error("Policy rule.warningMessage must be a string or a function");
+    }
+
+    if (rule.stopOnFailure !== undefined && typeof rule.stopOnFailure !== "boolean") {
+        throw new Error("Policy rule.stopOnFailure must be a boolean");
     }
 
     if (rule.type === "object") {
