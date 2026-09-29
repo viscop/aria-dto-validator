@@ -161,6 +161,41 @@ function resolveWarningMessage(source, fallback, ctx) {
     return resolveMissingMessage(source, fallback, ctx);
 }
 
+/**
+ * Resolves a rule option that may be configured as a lazy provider function.
+ * Providers are invoked only when validation reaches the corresponding option.
+ *
+ * @param {Object} rule
+ * @param {string} optionName
+ * @param {Object} ctx
+ * @returns {{ok:boolean,value?:*,error?:*}}
+ */
+function resolveRuleOption(rule, optionName, ctx) {
+    var configuredValue = rule && rule[optionName];
+
+    if (typeof configuredValue !== "function") {
+        return { ok: true, value: configuredValue };
+    }
+
+    var providerContext = mergeContext(ctx, {
+        rule: rule,
+        schema: rule,
+        option: optionName
+    });
+
+    try {
+        return {
+            ok: true,
+            value: configuredValue(providerContext)
+        };
+    } catch (e) {
+        return {
+            ok: false,
+            error: e
+        };
+    }
+}
+
 // ============================================================================
 // Pair-Compare (userDTO vs backendDTO) - Object/Array containment with recursion
 // v1: objectMode + arrayDefault + optional arrayRules (no include/exclude yet)
@@ -864,17 +899,22 @@ function assertStringValueListType(list, optionName) {
  * Validates that allowedValues has a valid type/shape according to schema.type.
  *
  * @param {Object} schema
+ * @param {*} configuredValues Optional resolved allowedValues value.
+ * @param {string} optionName Optional option name used in validation messages.
  * @returns {{ok:boolean, msg?:string}}
  */
-function assertAllowedValuesType(schema) {
-    if (!schema || !schema.allowedValues) return { ok: true };
+function assertAllowedValuesType(schema, configuredValues, optionName) {
+    var values = (arguments.length >= 2) ? configuredValues : (schema && schema.allowedValues);
+    var name = optionName || "allowedValues";
 
-    if (!Array.isArray(schema.allowedValues)) {
-        return { ok: false, msg: "allowedValues must be an array" };
+    if (!schema || values === null || values === undefined) return { ok: true };
+
+    if (!Array.isArray(values)) {
+        return { ok: false, msg: name + " must be an array" };
     }
 
     if (schema.type === "number") {
-        var list = schema.allowedValues;
+        var list = values;
         for (var i = 0; i < list.length; i++) {
             var v = list[i];
             if (typeof v === "number") continue;
@@ -885,17 +925,17 @@ function assertAllowedValuesType(schema) {
                 if (/^-?\d+(\.\d+)?\s*-\s*-?\d+(\.\d+)?$/.test(s)) continue;
             }
 
-            return { ok: false, msg: "allowedValues for type:number must contain only numbers or range strings" };
+            return { ok: false, msg: name + " for type:number must contain only numbers or range strings" };
         }
         return { ok: true };
     }
 
     if (schema.type === "string") {
-        return assertStringValueListType(schema.allowedValues, "allowedValues");
+        return assertStringValueListType(values, name);
     }
 
     if (schema.type === "boolean" || schema.type === "date") {
-        return { ok: false, msg: "allowedValues is not supported for type:" + schema.type };
+        return { ok: false, msg: name + " is not supported for type:" + schema.type };
     }
 
     return { ok: true };
@@ -1179,9 +1219,11 @@ function isRangeFullyCovered(a, b, intervals, integerMode) {
  *
  * @param {*} value
  * @param {Object} schema
+ * @param {Array<*>} allowedValues Resolved allowed values.
+ * @param {Object} validationContext Shared DTO/path context.
  * @returns {{valid:boolean, error?:string}}
  */
-function validateAllowedValuesCoverage(value, schema) {
+function validateAllowedValuesCoverage(value, schema, allowedValues, validationContext) {
     /**
      * Creates a successful coverage result.
      *
@@ -1199,25 +1241,25 @@ function validateAllowedValuesCoverage(value, schema) {
     function err(code, msg) {
         return {
             valid: false,
-            error: resolveErrorMessage(schema, msg, {
+            error: resolveErrorMessage(schema, msg, mergeContext(validationContext, {
                 rule: schema,
                 schema: schema,
                 value: value,
                 code: code,
                 reason: msg
-            })
+            }))
         };
     }
 
-    if (!schema.allowedValues || !Array.isArray(schema.allowedValues)) {
+    if (!allowedValues || !Array.isArray(allowedValues)) {
         return err("rule.allowedValues.invalid", "allowedValues must be an array");
     }
 
-    schema.allowedValues = normalizeAllowedValues(schema.allowedValues);
+    allowedValues = normalizeAllowedValues(allowedValues);
 
-    var integerMode = (schema.integerOnly === true) ? true : inferIntegerMode(schema.allowedValues, value);
+    var integerMode = (schema.integerOnly === true) ? true : inferIntegerMode(allowedValues, value);
 
-    var intervals = parseAllowedIntervals(schema.allowedValues, integerMode);
+    var intervals = parseAllowedIntervals(allowedValues, integerMode);
     if (!intervals || intervals.length === 0) {
         return err("number.allowedValues.invalid", "allowedValues is empty or invalid");
     }
@@ -1257,9 +1299,10 @@ function validateAllowedValuesCoverage(value, schema) {
  *
  * @param {*} value
  * @param {Object} schema
+ * @param {Object} validationContext Shared DTO/path context.
  * @returns {{valid:boolean, error?:string}}
  */
-function validateString(value, schema) {
+function validateString(value, schema, validationContext) {
     /**
      * Builds a RegExp from either a RegExp object or a string pattern.
      *
@@ -1280,18 +1323,21 @@ function validateString(value, schema) {
      *
      * @param {string} code
      * @param {string} message
+     * @param {Object} extraCtx
      * @returns {{valid:boolean, error:string}}
      */
-    function error(code, message) {
+    function error(code, message, extraCtx) {
+        var ctx = mergeContext(validationContext, {
+            rule: schema,
+            schema: schema,
+            value: value,
+            code: code,
+            reason: message
+        });
+
         return {
             valid: false,
-            error: resolveErrorMessage(schema, message, {
-                rule: schema,
-                schema: schema,
-                value: value,
-                code: code,
-                reason: message
-            })
+            error: resolveErrorMessage(schema, message, mergeContext(ctx, extraCtx))
         };
     }
 
@@ -1385,22 +1431,58 @@ function validateString(value, schema) {
     }
 
     if (schema.allowedValues) {
-        var chk = assertAllowedValuesType(schema);
+        var allowedResolution = resolveRuleOption(schema, "allowedValues", mergeContext(validationContext, {
+            value: value
+        }));
+
+        if (!allowedResolution.ok) {
+            var allowedProviderError = allowedResolution.error;
+            return error(
+                "rule.allowedValues.providerException",
+                "allowedValues provider failed: " + (allowedProviderError && allowedProviderError.message ? allowedProviderError.message : String(allowedProviderError)),
+                { option: "allowedValues", error: allowedProviderError }
+            );
+        }
+
+        var allowedValues = allowedResolution.value;
+        if (allowedValues === null || allowedValues === undefined) {
+            allowedValues = null;
+        }
+
+        var chk = assertAllowedValuesType(schema, allowedValues);
         if (!chk.ok) return error("rule.allowedValues.invalid", chk.msg);
 
-        schema.allowedValues = normalizeAllowedValuesByType(schema.allowedValues, schema);
+        if (allowedValues !== null) {
+            allowedValues = normalizeAllowedValuesByType(allowedValues, schema);
 
-        if (!isStringInValueList(value, schema.allowedValues, schema.ignoreCase === true)) {
-            return error("string.allowedValues", "Value is not in allowedValues");
+            if (!isStringInValueList(value, allowedValues, schema.ignoreCase === true)) {
+                return error("string.allowedValues", "Value is not in allowedValues");
+            }
         }
     }
 
     if (schema.notAllowedValues) {
-        var notAllowedCheck = assertStringValueListType(schema.notAllowedValues, "notAllowedValues");
-        if (!notAllowedCheck.ok) return error("rule.notAllowedValues.invalid", notAllowedCheck.msg);
+        var notAllowedResolution = resolveRuleOption(schema, "notAllowedValues", mergeContext(validationContext, {
+            value: value
+        }));
 
-        if (isStringInValueList(value, schema.notAllowedValues, schema.ignoreCase === true)) {
-            return error("string.notAllowedValues", "Value is in notAllowedValues");
+        if (!notAllowedResolution.ok) {
+            var notAllowedProviderError = notAllowedResolution.error;
+            return error(
+                "rule.notAllowedValues.providerException",
+                "notAllowedValues provider failed: " + (notAllowedProviderError && notAllowedProviderError.message ? notAllowedProviderError.message : String(notAllowedProviderError)),
+                { option: "notAllowedValues", error: notAllowedProviderError }
+            );
+        }
+
+        var notAllowedValues = notAllowedResolution.value;
+        if (notAllowedValues !== null && notAllowedValues !== undefined) {
+            var notAllowedCheck = assertStringValueListType(notAllowedValues, "notAllowedValues");
+            if (!notAllowedCheck.ok) return error("rule.notAllowedValues.invalid", notAllowedCheck.msg);
+
+            if (isStringInValueList(value, notAllowedValues, schema.ignoreCase === true)) {
+                return error("string.notAllowedValues", "Value is in notAllowedValues");
+            }
         }
     }
 
@@ -1414,27 +1496,53 @@ function validateString(value, schema) {
  *
  * @param {*} value
  * @param {Object} schema
+ * @param {Object} validationContext Shared DTO/path context.
  * @returns {{valid:boolean, error?:string}}
  */
-function validateNumber(value, schema) {
+function validateNumber(value, schema, validationContext) {
     /**
      * Creates a failed number-validation result using the schema's configured message.
      *
      * @param {string} code
      * @param {string} message
+     * @param {Object} extraCtx
      * @returns {{valid:boolean, error:string}}
      */
-    function error(code, message) {
+    function error(code, message, extraCtx) {
+        var ctx = mergeContext(validationContext, {
+            rule: schema,
+            schema: schema,
+            value: value,
+            code: code,
+            reason: message
+        });
+
         return {
             valid: false,
-            error: resolveErrorMessage(schema, message, {
-                rule: schema,
-                schema: schema,
-                value: value,
-                code: code,
-                reason: message
-            })
+            error: resolveErrorMessage(schema, message, mergeContext(ctx, extraCtx))
         };
+    }
+
+    /**
+     * Resolves allowedValues and converts provider failures to validation errors.
+     *
+     * @returns {{valid:boolean,value?:*}}
+     */
+    function resolveAllowedValues() {
+        var resolution = resolveRuleOption(schema, "allowedValues", mergeContext(validationContext, {
+            value: value
+        }));
+
+        if (!resolution.ok) {
+            var providerError = resolution.error;
+            return error(
+                "rule.allowedValues.providerException",
+                "allowedValues provider failed: " + (providerError && providerError.message ? providerError.message : String(providerError)),
+                { option: "allowedValues", error: providerError }
+            );
+        }
+
+        return { valid: true, value: resolution.value };
     }
 
     if (value === null || value === "") {
@@ -1455,12 +1563,20 @@ function validateNumber(value, schema) {
             return error("number.range.comparisonConflict", "Range input cannot be combined with numeric comparisons (gt/lt/min/max/eq/neq/multipleOf)");
         }
 
-        var chkR = assertAllowedValuesType(schema);
+        var rangeAllowedResolution = resolveAllowedValues();
+        if (!rangeAllowedResolution.valid) return rangeAllowedResolution;
+
+        var rangeAllowedValues = rangeAllowedResolution.value;
+        if (rangeAllowedValues === null || rangeAllowedValues === undefined) {
+            return error("number.range.allowedValuesRequired", "Range input requires allowedValues");
+        }
+
+        var chkR = assertAllowedValuesType(schema, rangeAllowedValues);
         if (!chkR.ok) return error("rule.allowedValues.invalid", chkR.msg);
 
-        schema.allowedValues = normalizeAllowedValuesByType(schema.allowedValues, schema);
+        rangeAllowedValues = normalizeAllowedValuesByType(rangeAllowedValues, schema);
 
-        return validateAllowedValuesCoverage(value, schema);
+        return validateAllowedValuesCoverage(value, schema, rangeAllowedValues, validationContext);
     }
 
     if (typeof value !== "number") {
@@ -1490,19 +1606,48 @@ function validateNumber(value, schema) {
     if (schema.multipleOf !== undefined && value % parseFloat(schema.multipleOf) !== 0) return error("number.multipleOf", "Value must be a multipleOf " + schema.multipleOf);
 
     if (schema.allowedValues) {
-        var chk = assertAllowedValuesType(schema);
+        var allowedResolution = resolveAllowedValues();
+        if (!allowedResolution.valid) return allowedResolution;
+
+        var allowedValues = allowedResolution.value;
+        if (allowedValues === null || allowedValues === undefined) {
+            allowedValues = null;
+        }
+
+        var chk = assertAllowedValuesType(schema, allowedValues);
         if (!chk.ok) return error("rule.allowedValues.invalid", chk.msg);
 
-        schema.allowedValues = normalizeAllowedValuesByType(schema.allowedValues, schema);
+        if (allowedValues !== null) {
+            allowedValues = normalizeAllowedValuesByType(allowedValues, schema);
 
-        var res = validateAllowedValuesCoverage(value, schema);
-        if (!res.valid) return { valid: false, error: res.error };
+            var res = validateAllowedValuesCoverage(value, schema, allowedValues, validationContext);
+            if (!res.valid) return { valid: false, error: res.error };
+        }
     }
 
     if (schema.notAllowedValues) {
-        schema.notAllowedValues = normalizeAllowedValues(schema.notAllowedValues);
-        if (isValueInRangeList(value, schema.notAllowedValues, schema)) {
-            return error("number.notAllowedValues", "Value is in notAllowedValues");
+        var notAllowedResolution = resolveRuleOption(schema, "notAllowedValues", mergeContext(validationContext, {
+            value: value
+        }));
+
+        if (!notAllowedResolution.ok) {
+            var notAllowedProviderError = notAllowedResolution.error;
+            return error(
+                "rule.notAllowedValues.providerException",
+                "notAllowedValues provider failed: " + (notAllowedProviderError && notAllowedProviderError.message ? notAllowedProviderError.message : String(notAllowedProviderError)),
+                { option: "notAllowedValues", error: notAllowedProviderError }
+            );
+        }
+
+        var notAllowedValues = notAllowedResolution.value;
+        if (notAllowedValues !== null && notAllowedValues !== undefined) {
+            var notAllowedCheck = assertAllowedValuesType(schema, notAllowedValues, "notAllowedValues");
+            if (!notAllowedCheck.ok) return error("rule.notAllowedValues.invalid", notAllowedCheck.msg);
+
+            notAllowedValues = normalizeAllowedValues(notAllowedValues);
+            if (isValueInRangeList(value, notAllowedValues, schema)) {
+                return error("number.notAllowedValues", "Value is in notAllowedValues");
+            }
         }
     }
 
@@ -1666,11 +1811,12 @@ function validateDate(value, schema) {
  *
  * @param {*} value
  * @param {Object} schema
+ * @param {Object} validationContext Shared DTO/path context.
  * @returns {{valid:boolean, error?:string}}
  */
-function validateValueByType(value, schema) {
-    if (schema.type === "number") return validateNumber(value, schema);
-    if (schema.type === "string") return validateString(value, schema);
+function validateValueByType(value, schema, validationContext) {
+    if (schema.type === "number") return validateNumber(value, schema, validationContext);
+    if (schema.type === "string") return validateString(value, schema, validationContext);
     if (schema.type === "boolean") return validateBoolean(value, schema);
     if (schema.type === "date") return validateDate(value, schema);
     return { valid: true };
@@ -1846,7 +1992,10 @@ function validateDtoMulti(userDTO, backendDTO, rules) {
         // A rule may resolve to many values through wildcards or multiple paths.
         for (var i = 0; i < values.length; i++) {
             var coerced = coerceValueByType(values[i], rule);
-            var res = validateValueByType(coerced, rule);
+            var res = validateValueByType(coerced, rule, mergeContext(getRuleBaseContext(rule), {
+                path: labelForMissing,
+                paths: labelForMissing
+            }));
 
             if (res.valid) {
                 validCount++;

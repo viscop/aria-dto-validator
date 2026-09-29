@@ -301,6 +301,259 @@ function runContextCodeCases() {
 }
 
 /**
+ * Builds JavaScript-only cases for lazy allowedValues/notAllowedValues providers.
+ *
+ * @returns {Array<Object>} Executed test outcomes.
+ */
+function runLazyProviderCases() {
+    var outcomes = [];
+
+    function addOutcome(name, result, failures) {
+        outcomes.push({
+            name: name,
+            fileName: "inline-" + name.replace(/\s+/g, "-"),
+            result: result,
+            failures: failures
+        });
+    }
+
+    var action = createValidatorAction();
+    var regexCalls = 0;
+    var regexResult = action(
+        [
+            {
+                path: "newMountpoint",
+                type: "string",
+                regex: "^/[a-zA-Z0-9]+$",
+                notAllowedValues: function () {
+                    regexCalls++;
+                    return ["/data"];
+                },
+                errorMessage: function (ctx) { return ctx.code; }
+            }
+        ],
+        { newMountpoint: "/invalid-name" },
+        {},
+        systemShim
+    );
+    var regexFailures = [];
+    if (regexCalls !== 0) regexFailures.push("provider was called after regex failure");
+    if (JSON.stringify(regexResult.errors) !== JSON.stringify(["string.regex"])) {
+        regexFailures.push("expected string.regex but got " + JSON.stringify(regexResult.errors));
+    }
+    addOutcome("lazy provider skipped after regex failure", regexResult, regexFailures);
+
+    action = createValidatorAction();
+    var nullCalls = 0;
+    var nullResult = action(
+        [
+            {
+                path: "newMountpoint",
+                type: "string",
+                nullOrEmpty: true,
+                notAllowedValues: function () {
+                    nullCalls++;
+                    return ["/data"];
+                }
+            }
+        ],
+        { newMountpoint: null },
+        {},
+        systemShim
+    );
+    var nullFailures = [];
+    if (nullCalls !== 0) nullFailures.push("provider was called for a nullOrEmpty value");
+    if (nullResult.valid !== true) nullFailures.push("expected nullOrEmpty value to be valid");
+    addOutcome("lazy provider skipped for nullOrEmpty", nullResult, nullFailures);
+
+    action = createValidatorAction();
+    var capturedContext = null;
+    var providerUserDTO = { newMountpoint: "/data" };
+    var providerBackendDTO = { source: "test-backend" };
+    var providerResult = action(
+        [
+            {
+                path: "newMountpoint",
+                type: "string",
+                regex: "^/[a-zA-Z0-9]+$",
+                notAllowedValues: function (ctx) {
+                    capturedContext = ctx;
+                    return ["/data"];
+                },
+                errorMessage: function (ctx) { return ctx.code; }
+            }
+        ],
+        providerUserDTO,
+        providerBackendDTO,
+        systemShim
+    );
+    var providerFailures = [];
+    if (JSON.stringify(providerResult.errors) !== JSON.stringify(["string.notAllowedValues"])) {
+        providerFailures.push("expected string.notAllowedValues but got " + JSON.stringify(providerResult.errors));
+    }
+    if (!capturedContext) {
+        providerFailures.push("provider context was not captured");
+    } else {
+        if (capturedContext.value !== "/data") providerFailures.push("provider context has wrong value");
+        if (capturedContext.option !== "notAllowedValues") providerFailures.push("provider context has wrong option");
+        if (capturedContext.userDTO !== providerUserDTO) providerFailures.push("provider context has wrong userDTO");
+        if (capturedContext.backendDTO !== providerBackendDTO) providerFailures.push("provider context has wrong backendDTO");
+        if (!capturedContext.rule || !capturedContext.schema) providerFailures.push("provider context is missing rule/schema");
+    }
+    addOutcome("lazy provider context and forbidden value", providerResult, providerFailures);
+
+    action = createValidatorAction();
+    var disabledResult = action(
+        [
+            {
+                path: "newMountpoint",
+                type: "string",
+                notAllowedValues: function () { return null; }
+            }
+        ],
+        { newMountpoint: "/data" },
+        {},
+        systemShim
+    );
+    var disabledFailures = [];
+    if (disabledResult.valid !== true) disabledFailures.push("null provider result did not disable validation");
+    addOutcome("lazy provider null disables constraint", disabledResult, disabledFailures);
+
+    action = createValidatorAction();
+    var exceptionResult = action(
+        [
+            {
+                path: "newMountpoint",
+                type: "string",
+                notAllowedValues: function () { throw new Error("backend unavailable"); },
+                errorMessage: function (ctx) { return ctx.code; }
+            }
+        ],
+        { newMountpoint: "/data" },
+        {},
+        systemShim
+    );
+    var exceptionFailures = [];
+    if (JSON.stringify(exceptionResult.errors) !== JSON.stringify(["rule.notAllowedValues.providerException"])) {
+        exceptionFailures.push("expected providerException but got " + JSON.stringify(exceptionResult.errors));
+    }
+    addOutcome("lazy provider exception code", exceptionResult, exceptionFailures);
+
+    action = createValidatorAction();
+    var invalidResult = action(
+        [
+            {
+                path: "newMountpoint",
+                type: "string",
+                notAllowedValues: function () { return "not-an-array"; },
+                errorMessage: function (ctx) { return ctx.code; }
+            }
+        ],
+        { newMountpoint: "/data" },
+        {},
+        systemShim
+    );
+    var invalidFailures = [];
+    if (JSON.stringify(invalidResult.errors) !== JSON.stringify(["rule.notAllowedValues.invalid"])) {
+        invalidFailures.push("expected invalid provider result code but got " + JSON.stringify(invalidResult.errors));
+    }
+    addOutcome("lazy provider invalid result code", invalidResult, invalidFailures);
+
+    action = createValidatorAction();
+    var allowedResult = action(
+        [
+            {
+                path: "cpu",
+                type: "number",
+                allowedValues: function () { return [2, 4, 8]; },
+                errorMessage: function (ctx) { return ctx.code; }
+            }
+        ],
+        { cpu: 6 },
+        {},
+        systemShim
+    );
+    var allowedFailures = [];
+    if (JSON.stringify(allowedResult.errors) !== JSON.stringify(["number.allowedValues"])) {
+        allowedFailures.push("expected number.allowedValues but got " + JSON.stringify(allowedResult.errors));
+    }
+    addOutcome("lazy number allowedValues provider", allowedResult, allowedFailures);
+
+    action = createValidatorAction();
+    var allowedExceptionResult = action(
+        [
+            {
+                path: "environment",
+                type: "string",
+                allowedValues: function () { throw new Error("catalog unavailable"); },
+                errorMessage: function (ctx) { return ctx.code; }
+            }
+        ],
+        { environment: "prod" },
+        {},
+        systemShim
+    );
+    var allowedExceptionFailures = [];
+    if (JSON.stringify(allowedExceptionResult.errors) !== JSON.stringify(["rule.allowedValues.providerException"])) {
+        allowedExceptionFailures.push("expected allowedValues providerException but got " + JSON.stringify(allowedExceptionResult.errors));
+    }
+    addOutcome("lazy allowedValues provider exception code", allowedExceptionResult, allowedExceptionFailures);
+
+    action = createValidatorAction();
+    var numberNotAllowedResult = action(
+        [
+            {
+                path: "port",
+                type: "number",
+                notAllowedValues: function () { return ["20-30", 3389]; },
+                errorMessage: function (ctx) { return ctx.code; }
+            }
+        ],
+        { port: 22 },
+        {},
+        systemShim
+    );
+    var numberNotAllowedFailures = [];
+    if (JSON.stringify(numberNotAllowedResult.errors) !== JSON.stringify(["number.notAllowedValues"])) {
+        numberNotAllowedFailures.push("expected number.notAllowedValues but got " + JSON.stringify(numberNotAllowedResult.errors));
+    }
+    addOutcome("lazy number notAllowedValues provider", numberNotAllowedResult, numberNotAllowedFailures);
+
+    action = createValidatorAction();
+    var laterCalls = 0;
+    var stoppedResult = action(
+        [
+            {
+                path: "newMountpoint",
+                type: "string",
+                regex: "^/[a-zA-Z0-9]+$",
+                stopOnFailure: true,
+                errorMessage: "invalid mountpoint"
+            },
+            {
+                path: "newMountpoint",
+                type: "string",
+                notAllowedValues: function () {
+                    laterCalls++;
+                    return ["/data"];
+                }
+            }
+        ],
+        { newMountpoint: "/invalid-name" },
+        {},
+        systemShim
+    );
+    var stoppedFailures = [];
+    if (laterCalls !== 0) stoppedFailures.push("provider in later rule was called after stopOnFailure");
+    if (JSON.stringify(stoppedResult.errors) !== JSON.stringify(["invalid mountpoint"])) {
+        stoppedFailures.push("unexpected stopOnFailure result " + JSON.stringify(stoppedResult.errors));
+    }
+    addOutcome("lazy provider skipped by stopOnFailure", stoppedResult, stoppedFailures);
+
+    return outcomes;
+}
+
+/**
  * Ensures the validator does not mutate caller-owned rule objects.
  *
  * This uses a JavaScript policy instead of a JSON fixture so function-based
@@ -411,8 +664,23 @@ function main() {
         }
     }
 
+    var lazyProviderOutcomes = runLazyProviderCases();
+    for (var l = 0; l < lazyProviderOutcomes.length; l++) {
+        var lazyProviderOutcome = lazyProviderOutcomes[l];
+        if (lazyProviderOutcome.failures.length > 0) {
+            failed.push(lazyProviderOutcome);
+            console.log("FAIL " + lazyProviderOutcome.fileName + " - " + lazyProviderOutcome.name);
+            for (var lf = 0; lf < lazyProviderOutcome.failures.length; lf++) {
+                console.log("  - " + lazyProviderOutcome.failures[lf]);
+            }
+            console.log("  result: " + JSON.stringify(lazyProviderOutcome.result));
+        } else {
+            console.log("PASS " + lazyProviderOutcome.fileName + " - " + lazyProviderOutcome.name);
+        }
+    }
+
     console.log("");
-    console.log("Executed " + (files.length + 1 + contextOutcomes.length) + " test case(s), " + failed.length + " failed.");
+    console.log("Executed " + (files.length + 1 + contextOutcomes.length + lazyProviderOutcomes.length) + " test case(s), " + failed.length + " failed.");
 
     if (failed.length > 0) {
         process.exit(1);

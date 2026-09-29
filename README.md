@@ -26,6 +26,7 @@ The article explains the motivation behind the validator, shows why UI validatio
 - [Path Syntax](#path-syntax)
 - [Rule Structure](#rule-structure)
 - [Fail-Fast Validation](#fail-fast-validation)
+- [Lazy Allowed-Value Providers](#lazy-allowed-value-providers)
 - [String Rules](#string-rules)
 - [Number Rules](#number-rules)
 - [Boolean Rules](#boolean-rules)
@@ -99,7 +100,7 @@ var result = System.getModule("ch.org.security.validation").validateDto(
 );
 ```
 
-Pure JSON policies are useful when rules should be stored in configuration, read from external sources, or shared between form actions and workflows. Keep in mind that JSON cannot contain JavaScript functions, so dynamic `errorMessage`, `missingMessage`, or `warningMessage` functions are only available when the policy is built as JavaScript.
+Pure JSON policies are useful when rules should be stored in configuration, read from external sources, or shared between form actions and workflows. Keep in mind that JSON cannot contain JavaScript functions, so dynamic message callbacks and lazy `allowedValues` or `notAllowedValues` providers are available only when the policy is built as JavaScript.
 
 The same applies to regular expressions. JSON has no native regular expression type, so JSON-based policies must store regex patterns as strings:
 
@@ -298,6 +299,69 @@ If the regular expression check fails, the `allowedValues` rule is not evaluated
 
 `stopOnFailure` applies only to errors produced by the current rule. Warnings do not stop evaluation. If the option is omitted or set to `false`, the existing error-collection behavior is preserved. The validator still checks the structure of the complete policy before evaluating DTO values, so malformed later rules are rejected even when an earlier validation rule would stop evaluation.
 
+## Lazy Allowed-Value Providers
+
+`allowedValues` and `notAllowedValues` can be configured either as arrays or as synchronous provider functions. A provider is called only when validation reaches that option. Earlier checks in the same rule must succeed first, and a provider in a later rule is not called when an earlier `stopOnFailure` rule fails.
+
+This is useful when values require a backend lookup that should only happen after the input has passed inexpensive format and security checks.
+
+```javascript
+var policy = [
+  {
+    path: "newMountpoint",
+    type: "string",
+    nullOrEmpty: true,
+    minLength: 2,
+    maxLength: 50,
+    regex: /^\/[a-zA-Z0-9]+(\/[a-zA-Z0-9]+)*$/,
+    notAllowedValues: function (ctx) {
+      if (ctx.userDTO.osFamily === "WIN") {
+        return null;
+      }
+
+      return System.getModule("com.example.vm")
+        .getMountPoints(ctx.userDTO.vmName)
+        .map(function (item) {
+          return item.mountpoint;
+        });
+    },
+    errorMessage: function (ctx) {
+      switch (ctx.code) {
+        case "string.regex":
+          return "The mount point contains invalid characters.";
+        case "string.notAllowedValues":
+          return "The mount point is already in use.";
+        case "rule.notAllowedValues.providerException":
+          return "Existing mount points could not be loaded.";
+        default:
+          return "The mount point is invalid: " + ctx.reason;
+      }
+    },
+  },
+];
+```
+
+For `null`, an empty string with `nullOrEmpty: true`, a failed length check, or a failed `regex`, the provider in this example is not called. If the provider returns `null` or `undefined`, the corresponding `allowedValues` or `notAllowedValues` constraint is disabled for that value.
+
+Providers receive the following context:
+
+| Field             | Content                                                        |
+| ----------------- | -------------------------------------------------------------- |
+| `value`           | The current value after type coercion and earlier processing.  |
+| `option`          | `allowedValues` or `notAllowedValues`.                         |
+| `rule` / `schema` | The current internally cloned rule.                            |
+| `userDTO`         | The full user DTO.                                             |
+| `backendDTO`      | The full backend DTO.                                          |
+| `path` / `paths`  | The path or path list associated with the current value set.   |
+
+Provider functions must be synchronous and must return an array, `null`, or `undefined`. Promises are not supported. A provider is invoked once for each resolved value that reaches the option, so wildcard rules may invoke it multiple times.
+
+If a provider throws an exception, validation fails with `rule.allowedValues.providerException` or `rule.notAllowedValues.providerException`. If it returns another value type, the existing `rule.allowedValues.invalid` or `rule.notAllowedValues.invalid` code is used.
+
+For numeric range input, `allowedValues` remains required because the requested range cannot be validated without coverage data. A lazy `allowedValues` provider returning `null` or `undefined` therefore produces `number.range.allowedValuesRequired`.
+
+Provider functions are available only in JavaScript policies. JSON policies cannot contain functions and must continue to use static arrays.
+
 ## String Rules
 
 ```javascript
@@ -325,8 +389,8 @@ Supported options:
 | `startsWith`, `endsWith`           | Prefix or suffix checks.                                    |
 | `contains`, `notContains`          | Required or forbidden substring.                            |
 | `anyOf`                            | List of alternative conditions, such as `const` or `regex`. |
-| `allowedValues`                    | List of allowed strings.                                    |
-| `notAllowedValues`                 | List of forbidden strings.                                  |
+| `allowedValues`                    | Allowed strings as an array or synchronous provider function. |
+| `notAllowedValues`                 | Forbidden strings as an array or synchronous provider function. |
 
 `allowedValues` and `notAllowedValues` must contain only strings. Both comparisons are case-sensitive by default and respect `ignoreCase: true`.
 
@@ -378,8 +442,8 @@ Supported options:
 | `gt`, `gte`, `lt`, `lte` | Comparison operators.                                                                 |
 | `eq`, `neq`              | Must equal or must not equal.                                                         |
 | `multipleOf`             | Must be a multiple of the configured value.                                           |
-| `allowedValues`          | Allowed numbers or ranges, for example `[22, "80-90", 443]`.                          |
-| `notAllowedValues`       | Forbidden numbers or ranges.                                                          |
+| `allowedValues`          | Allowed numbers/ranges as an array or synchronous provider function.                  |
+| `notAllowedValues`       | Forbidden numbers/ranges as an array or synchronous provider function.                |
 | `allowRangeInput`        | Allows inputs such as `"4609-4615"` if the range is fully covered by `allowedValues`. |
 
 `notAllowedValues` supports the same number and range notation as `allowedValues`. This is useful for reserved ports or blocked numeric ranges:
@@ -628,6 +692,7 @@ Depending on the situation, the context contains:
 | `backendDTO`      | The full backend DTO.                      |
 | `value`           | The validated value, if available.         |
 | `path` / `paths`  | Affected path or path list.                |
+| `option`          | The lazy option involved, if applicable.   |
 | `code`             | Stable, machine-readable validation code.  |
 | `reason`          | Technical reason for the validation error. |
 
@@ -698,17 +763,19 @@ Context codes identify why a message callback was invoked. Type-specific codes d
 
 ### Rule, Path, and Object Codes
 
-| Code                            | Meaning                                                       |
-| ------------------------------- | ------------------------------------------------------------- |
-| `path.missing`                  | A configured path did not resolve and `onMissing` handled it. |
-| `path.resolve`                  | A normal or multi-path expression could not be resolved.      |
-| `path.joinResolve`              | A joined path expression could not be resolved.               |
-| `rule.anyMatch`                 | No resolved value satisfied an `anyMatch` rule.               |
-| `rule.noneMatch`                | A resolved value satisfied a `noneMatch` rule.                |
-| `rule.allowedValues.invalid`    | `allowedValues` has an unsupported shape or entry type.       |
-| `rule.notAllowedValues.invalid` | `notAllowedValues` has an unsupported shape or entry type.    |
-| `object.compare`                | An object comparison failed.                                  |
-| `object.compareException`       | An object comparison raised an exception.                     |
+| Code                                      | Meaning                                                       |
+| ----------------------------------------- | ------------------------------------------------------------- |
+| `path.missing`                            | A configured path did not resolve and `onMissing` handled it. |
+| `path.resolve`                            | A normal or multi-path expression could not be resolved.      |
+| `path.joinResolve`                        | A joined path expression could not be resolved.               |
+| `rule.anyMatch`                           | No resolved value satisfied an `anyMatch` rule.               |
+| `rule.noneMatch`                          | A resolved value satisfied a `noneMatch` rule.                |
+| `rule.allowedValues.invalid`              | `allowedValues` has an unsupported shape or entry type.       |
+| `rule.notAllowedValues.invalid`           | `notAllowedValues` has an unsupported shape or entry type.    |
+| `rule.allowedValues.providerException`    | The `allowedValues` provider threw an exception.               |
+| `rule.notAllowedValues.providerException` | The `notAllowedValues` provider threw an exception.            |
+| `object.compare`                          | An object comparison failed.                                  |
+| `object.compareException`                 | An object comparison raised an exception.                     |
 
 For aggregate rules, the callback receives the aggregate code. For example, a failed `anyMatch` rule reports `rule.anyMatch`, even when the individual values failed because of `string.regex` or `string.allowedValues`. Use separate rules when each underlying constraint needs its own final message.
 

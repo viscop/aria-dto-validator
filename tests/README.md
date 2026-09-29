@@ -61,7 +61,7 @@ Each test case is a plain JSON document:
 }
 ```
 
-Expected results can use `errorIncludes` and `warningIncludes` for required message fragments, `errorExcludes` and `warningExcludes` for forbidden fragments, and `errorCount` or `warningCount` for exact list sizes. Function-based message callbacks are covered by inline JavaScript cases in the test runner because functions cannot be represented in JSON fixtures.
+Expected results can use `errorIncludes` and `warningIncludes` for required message fragments, `errorExcludes` and `warningExcludes` for forbidden fragments, and `errorCount` or `warningCount` for exact list sizes. Function-based message callbacks and lazy `allowedValues` or `notAllowedValues` providers are covered by inline JavaScript cases in the test runner because functions cannot be represented in JSON fixtures.
 
 JSON policies stored as strings can be tested with `policyJson`. The runner parses `policyJson` before calling the validator, which mirrors how a workflow would parse a policy loaded from an Aria Configuration Element.
 
